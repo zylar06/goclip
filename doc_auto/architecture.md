@@ -57,3 +57,16 @@ Checkpoints are atomic JSON/media files but SQLite alone is task/project authori
 Subprocess contexts/timeouts terminate process groups. Partial exports verified before publication.
 4 GiB and 2 hours default limits. Secrets encrypted with persistent 0600 AES-GCM key.
 Source imports only explicit Bilibili/YouTube HTTPS links; model endpoints validated separately.
+
+Update: 2026-09-29T18:18:00+08:00 — Documented the full user workflow and module
+diagram in README: local/manual import → CPU ASR → draft → MP4 is independent
+of paid AI; subtitle/visual analysis and translation have distinct model needs.
+Added environment-to-store bootstrap without API/schema changes:
+Compose `.env` → explicit runtime model variables → web startup validation →
+one atomic encrypted settings transaction → web/worker read the shared store.
+`cmd/autoclip/model_env.go` owns validation/precedence; `internal/store/models.go`
+owns atomic encryption/persistence. No settings are baked into build arguments
+or images. Runtime UI changes can be superseded at next web startup, and
+all-empty env groups preserve existing settings. No legacy automatic migration
+is implemented; the user's separately authorized local copy is recorded in
+verification.md.

@@ -5,7 +5,15 @@ import { execFileSync } from 'node:child_process'
 const command=process.env.COMPOSE_EXE||'docker'
 const prefix=process.env.COMPOSE_EXE?[]:['compose']
 const config=JSON.parse(execFileSync(command,[...prefix,'-f','compose.yaml','config','--format','json'],{
-  encoding:'utf8',timeout:15000,windowsHide:true,env:{...process.env,BIND_IP:'127.0.0.1',PORT:'8080'},
+  encoding:'utf8',timeout:15000,windowsHide:true,env:{
+    ...process.env,BIND_IP:'127.0.0.1',PORT:'8080',
+    APT_SOURCE_MODE:'mirror',DEBIAN_MIRROR:'https://deb.debian.org/debian',
+    DEBIAN_SECURITY_MIRROR:'https://deb.debian.org/debian-security',DEBIAN_SNAPSHOT:'20260901T000000Z',
+    AUTOCLIP_TEXT_BASE_URL:'https://text.example/v1',AUTOCLIP_TEXT_MODEL:'test-text',
+    AUTOCLIP_TEXT_API_KEY:'test-text-not-a-real-key',
+    AUTOCLIP_VISION_BASE_URL:'https://vision.example/v1',AUTOCLIP_VISION_MODEL:'test-vision',
+    AUTOCLIP_VISION_API_KEY:'test-vision-not-a-real-key',
+  },
 }))
 const lock=JSON.parse(fs.readFileSync('tools.lock.json','utf8'))
 const dockerfile=fs.readFileSync('Dockerfile','utf8')
@@ -41,4 +49,51 @@ test('Dockerfile consumes the verified image/tool/model lock',()=>{
   }
   assert(dockerfile.includes('COPY api/ ./api/'),'frontend contract must be available at build time')
   assert(dockerfile.includes('USER 10001:10001'),'runtime is not root')
+})
+test('only web builds the shared image; worker never pulls a different copy',()=>{
+  assert(config.services.web.build)
+  assert(!config.services.worker.build)
+  assert.equal(config.services.worker.pull_policy,'never')
+  assert.equal(config.services.web.build.args.APT_SOURCE_MODE,lock.debian_source_default)
+  assert.equal(config.services.web.build.args.DEBIAN_MIRROR,lock.debian_mirrors.main)
+  assert.equal(config.services.web.build.args.DEBIAN_SECURITY_MIRROR,lock.debian_mirrors.security)
+  assert.equal(config.services.web.build.args.DEBIAN_SNAPSHOT,lock.debian_snapshot)
+})
+test('APT, npm and Go downloads are cached without disabling build-time tests',()=>{
+  assert(!/^#\s*syntax=/m.test(dockerfile),'do not require an extra frontend image pull')
+  assert(dockerfile.includes('FROM go-base AS backend'))
+  assert(dockerfile.includes('COPY --from=go-base /etc/ssl/certs/ca-certificates.crt'))
+  assert(dockerfile.includes('FROM apt-base AS native'))
+  assert(dockerfile.includes('FROM apt-base AS runtime'))
+  for(const id of ['autoclip-apt-native-amd64','autoclip-apt-runtime-amd64']){
+    assert(dockerfile.includes(`id=${id},target=/var/cache/apt,sharing=locked`))
+  }
+  for(const target of ['/root/.npm','/go/pkg/mod','/root/.cache/go-build']){
+    assert(dockerfile.includes(`target=${target}`),`missing dependency cache ${target}`)
+  }
+  assert(dockerfile.includes('npm run typecheck && npm test && npm run build'))
+  assert(dockerfile.includes('go test -timeout 180s ./...'))
+})
+test('model environment reaches runtime only; secrets never become build arguments',()=>{
+  const expected={
+    AUTOCLIP_TEXT_BASE_URL:'https://text.example/v1',AUTOCLIP_TEXT_MODEL:'test-text',
+    AUTOCLIP_TEXT_API_KEY:'test-text-not-a-real-key',
+    AUTOCLIP_VISION_BASE_URL:'https://vision.example/v1',AUTOCLIP_VISION_MODEL:'test-vision',
+    AUTOCLIP_VISION_API_KEY:'test-vision-not-a-real-key',
+  }
+  for(const service of Object.values(config.services)){
+    for(const [key,value] of Object.entries(expected)){
+      assert.equal(service.environment[key],value)
+      assert(!(key in (service.build?.args||{})))
+      assert(!dockerfile.includes(key),'credentials must not be baked into the image')
+    }
+  }
+  const ignored=fs.readFileSync('.dockerignore','utf8').split(/\r?\n/)
+  assert(ignored.includes('.env'),'local secrets must not enter build context')
+  const gitignore=fs.readFileSync('.gitignore','utf8').split(/\r?\n/)
+  assert(gitignore.includes('.env'),'local secrets must not enter Git')
+  const example=fs.readFileSync('.env.example','utf8')
+  for(const key of Object.keys(expected)){
+    assert(example.split(/\r?\n/).includes(`${key}=`),'example must contain empty placeholders only')
+  }
 })

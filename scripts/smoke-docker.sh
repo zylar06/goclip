@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
-# Build estimate 10–25m, CI caps the whole job at 45m. Inspect unchanged stages.
+# CI caps the whole job at 45m. Download speed dominates a cold build; inspect stalled stages.
 mkdir -p artifacts
-node --test scripts/deployment.test.mjs
+node --test scripts/apt-setup.test.mjs scripts/deployment.test.mjs
 docker compose up -d --build --wait --wait-timeout 180
 docker compose exec -T worker ffmpeg -hide_banner -loglevel error -y \
   -f lavfi -i testsrc2=size=320x180:rate=30 \

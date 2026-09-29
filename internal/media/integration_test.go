@@ -83,6 +83,75 @@ func nativeFrame(t *testing.T, tools *Tools, video string, at float64) image.Ima
 	return img
 }
 
+func TestIntegrationChineseSubtitleFont(t *testing.T) {
+	tools := integrationTools(t)
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "fonts"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	font, err := os.ReadFile(filepath.Join(tools.cfg.FontDir, "NotoSansSC-StaticBold.ttf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fonts", "NotoSansSC-StaticBold.ttf"), font, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cues := []domain.Cue{{Start: 0, End: 1, Text: strings.Repeat("中文測試字幕 简体繁體", 5)}}
+	captions, err := tools.subtitleASS(cues, 640, 360)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(captions, []byte(`\N`)) {
+		t.Fatal("long Chinese subtitle must wrap before reaching libass")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "captions.ass"), captions, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var diagnostic strings.Builder
+	_, err = run(context.Background(), command{
+		exe: tools.cfg.FFmpeg, dir: dir, timeout: 30 * time.Second,
+		args: []string{"-hide_banner", "-nostdin", "-loglevel", "info",
+			"-f", "lavfi", "-i", "color=black:s=640x360:d=1",
+			"-vf", "ass=filename=captions.ass:fontsdir=fonts",
+			"-frames:v", "1", "-threads", "2", "-c:v", "png", "-f", "image2", "subtitle.png"},
+		line: func(line string) error {
+			diagnostic.WriteString(line + "\n")
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := diagnostic.String()
+	if !strings.Contains(log, "fontselect:") || !strings.Contains(log, "NotoSansSC-Thin") ||
+		strings.Contains(log, "Glyph ") || strings.Contains(log, "failed to find") {
+		t.Fatalf("Chinese subtitles must use the bundled CJK font without missing-glyph fallback: %s", log)
+	}
+	pixels, err := os.ReadFile(filepath.Join(dir, "subtitle.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(pixels))
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := 0
+	for y := 0; y < 360; y++ {
+		for x := 0; x < 640; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			if r > 45000 && g > 45000 && b > 45000 {
+				visible++
+				if x < 640/30 || x >= 640-640/30 || y < 360/30 || y >= 360-360/30 {
+					t.Fatalf("Chinese subtitle overflows the frame margins at %d,%d", x, y)
+				}
+			}
+		}
+	}
+	if visible < 200 {
+		t.Fatalf("Chinese subtitle image is empty or truncated: %d bright pixels", visible)
+	}
+}
+
 func TestIntegrationRenderConcatSubtitlesTitleTiming(t *testing.T) {
 	tools := integrationTools(t)
 	source := generateSource(t, tools, "tone")

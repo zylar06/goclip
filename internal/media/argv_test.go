@@ -74,6 +74,31 @@ func TestDownloadArgv(t *testing.T) {
 	}
 }
 
+func TestDownloadFormatAvoidsBilibiliMCDN(t *testing.T) {
+	tools := New(Config{})
+	for _, raw := range []string{
+		"https://www.bilibili.com/video/BV1TRhs6hEQp/",
+		"https://bilibili.com/video/av123",
+		"https://m.bilibili.com/video/BV1TRhs6hEQp",
+	} {
+		format := valueAfter(tools.downloadArgs(raw, ""), "--format")
+		want := "bv*[url!*=mcdn.bilivideo.cn]+ba[url!*=mcdn.bilivideo.cn]/b[url!*=mcdn.bilivideo.cn]"
+		if format != want {
+			t.Errorf("%s: format=%q, want %q", raw, format, want)
+		}
+	}
+	for _, raw := range []string{
+		"https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+		"https://youtu.be/dQw4w9WgXcQ",
+		"https://www.bilibili.com.evil.test/video/BV1TRhs6hEQp",
+		"url",
+	} {
+		if format := valueAfter(tools.downloadArgs(raw, ""), "--format"); format != "bv*+ba/b" {
+			t.Errorf("unrelated host received Bilibili-specific selection: %s: %s", raw, format)
+		}
+	}
+}
+
 func TestNewResolvesPATHForDownloaderFFmpegLocation(t *testing.T) {
 	dir := t.TempDir()
 	name := "test-media-tool"

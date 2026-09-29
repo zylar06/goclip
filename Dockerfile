@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# Use Docker's bundled BuildKit frontend; no separate Dockerfile frontend image pull.
 # Linux amd64 only. Runtime native binaries/model are verified against fixed hashes.
 FROM node:22.23.3-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend
 WORKDIR /src
@@ -6,22 +6,37 @@ COPY VERSION ./VERSION
 COPY api/ ./api/
 COPY web/package*.json ./web/
 WORKDIR /src/web
-RUN npm ci --no-audit --no-fund
+RUN --mount=type=cache,id=autoclip-npm,target=/root/.npm \
+    npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run typecheck && npm test && npm run build
 
-FROM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS backend
+FROM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS go-base
+FROM go-base AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download && go mod verify
+RUN --mount=type=cache,id=autoclip-go-mod,target=/go/pkg/mod \
+    go mod download && go mod verify
 COPY . .
-RUN CGO_ENABLED=0 go test -timeout 180s ./... \
+RUN --mount=type=cache,id=autoclip-go-mod,target=/go/pkg/mod \
+    --mount=type=cache,id=autoclip-go-build-amd64,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go test -timeout 180s ./... \
     && CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$(cat VERSION)" -o /out/autoclip ./cmd/autoclip
 
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS native
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS apt-base
+ARG APT_SOURCE_MODE=mirror
+ARG DEBIAN_MIRROR=https://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=https://deb.debian.org/debian-security
+ARG DEBIAN_SNAPSHOT=20260901T000000Z
+# Bootstrap HTTPS from the already-pinned Go image, without disabling TLS checks.
+COPY --from=go-base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY scripts/apt-setup.sh /tmp/apt-setup.sh
+RUN sh /tmp/apt-setup.sh
+
+FROM apt-base AS native
 ARG TARGETARCH
-COPY scripts/apt-snapshot.sh /tmp/apt-snapshot.sh
-RUN test "${TARGETARCH:-amd64}" = amd64 && sh /tmp/apt-snapshot.sh \
+RUN --mount=type=cache,id=autoclip-apt-native-amd64,target=/var/cache/apt,sharing=locked \
+    test "${TARGETARCH:-amd64}" = amd64 && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl unzip cmake build-essential \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
@@ -52,9 +67,9 @@ RUN curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
     && curl -fL --retry 3 --max-time 120 https://raw.githubusercontent.com/denoland/deno/v2.9.7/LICENSE.md -o /out/licenses/deno-MIT.txt \
     && curl -fL --retry 3 --max-time 120 https://raw.githubusercontent.com/openai/whisper/v20250625/LICENSE -o /out/licenses/whisper-model-MIT.txt
 
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS runtime
-COPY scripts/apt-snapshot.sh /tmp/apt-snapshot.sh
-RUN sh /tmp/apt-snapshot.sh \
+FROM apt-base AS runtime
+RUN --mount=type=cache,id=autoclip-apt-runtime-amd64,target=/var/cache/apt,sharing=locked \
+    apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg fontconfig libstdc++6 libgomp1 \
     && mkdir -p /usr/share/autoclip /app /data /models \
     && dpkg-query -W > /usr/share/autoclip/debian-packages.txt \

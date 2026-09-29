@@ -40,3 +40,22 @@ regressions; OpenAPI duplicate response is 201; live native API/worker/React
 smoke and real speech/media integration are recorded in verification.md.
 Late cancellation/completion now resolves atomically: accepted cancellation
 cannot be overwritten by a success, and project state follows the durable result.
+
+Update: 2026-09-29T18:18:00+08:00 — Added explicit runtime model bootstrap:
+`AUTOCLIP_TEXT_BASE_URL`, `AUTOCLIP_TEXT_MODEL`, `AUTOCLIP_TEXT_API_KEY` and the
+equivalent `AUTOCLIP_VISION_*` group. Only `web` applies these on startup, before
+serving requests; worker/healthcheck never rewrite settings. All-blank groups
+preserve the database. Any nonempty group requires both base URL and model,
+validates with the existing AI validator, and replaces the complete tuple;
+an empty key means unauthenticated, never reuse of a previous server's key.
+All supplied groups validate first and are encrypted/written in one transaction
+via `Store.PutModels`, so a validation/write failure cannot partially replace
+text settings. Startup errors do not contain input values or credentials.
+Startup makes no provider calls. UI edits remain effective until a subsequent
+web startup reapplies a nonempty environment group. Removing environment
+settings does not delete previously saved database secrets.
+
+Tests cover preservation, partial/invalid groups, redaction, encryption,
+keyless endpoint changes, startup precedence, worker no-op, cookie isolation
+and rollback on the second database write. README now covers startup, complete
+configuration ownership, feature workflow and service architecture.
