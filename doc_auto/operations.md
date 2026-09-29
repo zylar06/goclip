@@ -216,3 +216,26 @@ environment matching and preservation of the existing real-video export passed.
 No cloud model request was made. Copying two credential tuples was an explicit
 one-off local action, not an automatic migration feature. README startup,
 configuration and architecture sections now describe env-based setup.
+
+Update: 2026-09-29T18:39:00+08:00 — Fixed the CI fixture transfer in
+`scripts/smoke-docker.sh`. Runtime `/tmp` is tmpfs; Docker's archive-based
+`compose cp worker:/tmp/smoke.mp4` failed despite successful generation and
+healthy containers. The script now executes `cat` inside the live worker with
+`exec -T` and redirects its binary stdout using POSIX sh. Transfer errors abort
+before API testing/restart. No root-filesystem, tmpfs or container-security
+settings were relaxed. Two real-shell/fake-command regressions exercise byte
+preservation and failure propagation; a third executes the actual restart-check
+program against a loopback server to test URL override and HTTP failure.
+The restart check now uses the same
+`AUTOCLIP_URL` override as the import/export harness, checks HTTP status, and
+has a 30-second request deadline, allowing an isolated local Compose project.
+
+Update: 2026-09-29T18:40:00+08:00 — The complete smoke script passed locally
+in 35 seconds using the separate `autoclip-ci-smoke-20260929` project on
+loopback port 18081, with model environment values cleared. It generated and
+streamed the fixture, imported video/SRT, rendered/downloaded a real MP4, then
+restarted services and verified persistence. Only this test project's containers
+and volumes were removed afterward; the normal app/services/data were untouched.
+All 16 setup/deployment/smoke regressions pass. Logs:
+`artifacts/ci-smoke-local.*.log`, `artifacts/ci-smoke-local-result.json`,
+`artifacts/ci-smoke-regression-after.log`.

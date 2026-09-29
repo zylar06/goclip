@@ -464,7 +464,7 @@ web 和 worker 应保持数据目录及资源限制配置一致。原生模式�
 ```sh
 go test -mod=readonly -timeout 180s ./...
 go vet -mod=readonly ./...
-node --test scripts/apt-setup.test.mjs scripts/deployment.test.mjs
+node --test scripts/apt-setup.test.mjs scripts/deployment.test.mjs scripts/smoke-docker.test.mjs
 cd web
 npm run typecheck
 npm test
@@ -478,12 +478,14 @@ npm run build
 ## 9. 已验证范围与文档索引
 
 2026-09-29 本机记录：Go **254** 项（含子测试）通过、0 失败/跳过，`go vet` 通过；
-前端 **43/43**，构建配置 **13/13**；媒体修复后实际运行镜像内的媒体测试 **66/66**。
+前端 **43/43**，构建配置及冒烟回归 **16/16**；媒体修复后实际运行镜像内的媒体测试 **66/66**。
 指定 B 站视频 `BV1TRhs6hEQp` 完成真实下载、本地转写及 30 秒手动切片导出，
 验证了视频/音轨、HTTP 下载、中文字体及字幕换行。
 
 **不代表所有外部服务均已验收：**未调用付费文本/视觉模型验证自动选片；
-YouTube/其他受限视频、目标服务器、完整 race detector 和字幕识别准确率仍有独立验收边界。
+YouTube/其他受限视频、目标服务器和字幕识别准确率仍有独立验收边界。
+GitHub Ubuntu 的 Go race / 前端检查已通过；容器冒烟的 tmpfs 文件传输问题已修复，
+独立本地项目完整跑通导入、导出、下载及重启持久化。具体 CI 运行结果见验收文档。
 历史测试证据在本机被 Git 忽略的 `artifacts/`，克隆仓库不会附带这些日志、原片或成片。
 
 - `doc_auto/architecture.md`：模块职责、API 契约、状态和可靠性边界。

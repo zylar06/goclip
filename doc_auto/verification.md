@@ -1,6 +1,6 @@
 # Verification and release boundary
 
-Updated: 2026-09-29T18:20:00+08:00
+Updated: 2026-09-29T18:40:00+08:00
 
 This is an implemented first Go/Web version. Linux image build and service
 health are verified; **not all production/external-service gates are closed**.
@@ -8,14 +8,15 @@ Original `D:\com\autoclip` and installed
 desktop data were not modified. Initial branch: `feat/go-web-docker`; the user
 subsequently requested renaming it to `main` and publishing commit `e4b625d` to
 `zylar06/goclip`, which was verified over HTTPS. Current build optimization work
-is on `feat/docker-build-speed`, not pushed. Desktop secrets were not imported
+is on `feat/docker-build-speed`, published as PR #1 (commit `28fac89` before
+the subsequent CI fixture fix). Desktop secrets were not imported
 during the original migration; the later user-authorized model-only copy is
 recorded below.
 
 Final local run: **254 passing Go test events (including subtests), 0 failed,
 0 skipped**, with real Chinese ASR enabled; `go vet` passed.
 Frontend: **43/43 tests** plus typecheck/contract check and production build.
-Build configuration checks: **13/13**. Linux images build and both Compose
+Build configuration/smoke regression checks: **16/16**. Linux images build and both Compose
 services are healthy. The deployed services are intentionally left running at
 `127.0.0.1:8080`; their named data/model volumes are preserved.
 Real-source acceptance and remaining external-service gates are detailed below.
@@ -48,11 +49,12 @@ human-speech accuracy benchmark. Review generated subtitles before publication.
 
 ## Not yet verified / release gate
 
-1. **Other Linux hosts / CI smoke**: this host's Docker build, service health
+1. **Other Linux hosts / latest CI revision**: this host's Docker build, service health
    and actual Bilibili import/CPU ASR/manual MP4 export pass. The successful
    project survived container recreation during subtitle fixes. The separate
-   `scripts/smoke-docker.sh` fixture/restart job and target-server deployment
-   still need their own recorded run; local acceptance does not prove all hosts.
+   `scripts/smoke-docker.sh` fixture/restart job now also passes in an isolated
+   local Compose project after the transfer fix. New GitHub results are recorded
+   below when available; local acceptance does not prove all target servers.
 2. **Other Bilibili videos, login-restricted content and YouTube**: the specified
    Bilibili sample downloaded without cookies. This does not verify all videos,
    account/region restrictions, cookie-authenticated imports or YouTube.
@@ -62,10 +64,10 @@ human-speech accuracy benchmark. Review generated subtitles before publication.
    speech sample produced real subtitles, but visible recognition errors remain
    (including football names/phrases). No accuracy score or reference comparison
    was performed. The 4-core/8-GiB target still needs resource measurement.
-5. **Race detector**: full `-race` execution remains unverified in this run.
-   Linux process-group cancellation now passes in the final runtime image,
-   as does its full media suite. This is not equivalent to a race-detector run;
-   CI's Linux job supplies `-race`.
+5. **Race detector / current CI revision**: GitHub's Ubuntu `test` job passed
+   `go test -race -timeout 180s ./...`, vet, generated-contract checking and the
+   frontend checks for commit `28fac89`. This does not imply the separate
+   container smoke job passed; its fixture-transfer failure is recorded below.
 
 Do not describe these items as passed until their logs and outcomes are recorded.
 
@@ -185,6 +187,33 @@ Evidence: `artifacts/env-model-rebuild.*.log`,
 `artifacts/env-frontend-*.log`. Local `.env` is not part of Git or build context.
 The application does not automatically discover/import desktop settings.
 
+## CI fixture transfer correction
+
+Update: 2026-09-29T18:39:00+08:00 — GitHub runs `36555977801` (PR) and
+`36555936204` (push) both passed the ordinary `test` job, including `-race`.
+Their `container` jobs built images and started healthy services but failed at
+`docker compose cp worker:/tmp/smoke.mp4`: the archive API could not find the
+file in the live tmpfs mount. The initial main run `36544382705` had the same
+failure. This was a smoke-harness defect, not model authentication or an
+application export failure. Logs are retained in `artifacts/ci-container-*.log`.
+
+The fixture transfer now streams bytes via `docker compose exec -T worker cat`.
+Two new shell regressions first failed against the old implementation; one
+checks exact binary contents including NUL/invalid UTF-8/CRLF, the other checks
+nonzero transfer exit aborts before API smoke/restart. A third test runs the
+actual inline restart check against a loopback HTTP server to verify the
+isolated API override and non-2xx rejection.
+
+Update: 2026-09-29T18:40:00+08:00 — All **16/16** APT/deployment/smoke
+regressions passed. The full `sh scripts/smoke-docker.sh` run passed locally
+in **35 seconds**, including real fixture transfer, video/SRT import, draft,
+FFmpeg MP4, Range download and post-restart persistence. It ran on a separate
+Compose project/port with blank model environment and no production data
+volumes; test resources were removed afterward. The normal web/worker stayed
+healthy and were not restarted. Evidence: `artifacts/ci-smoke-local-result.json`,
+`artifacts/ci-smoke-local.*.log`, `artifacts/ci-smoke-regression-after.log`.
+Fresh GitHub job success is not implied until its result is observed.
+
 ## Intentional first-version limits
 
 - Trusted LAN/VPN only; no accounts, quotas, isolation, platform publishing,
@@ -219,7 +248,7 @@ npm run typecheck
 npm test
 npm run build
 cd ..
-node --test scripts/apt-setup.test.mjs scripts/deployment.test.mjs
+node --test scripts/apt-setup.test.mjs scripts/deployment.test.mjs scripts/smoke-docker.test.mjs
 sh scripts/smoke-docker.sh
 ```
 
