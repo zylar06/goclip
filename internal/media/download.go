@@ -80,6 +80,16 @@ func sourceURL(raw string) (string, error) {
 }
 
 func (t *Tools) downloadArgs(raw, cookies string) []string {
+	format := "bv*+ba/b"
+	// Download validates/canonicalizes the source URL before constructing argv.
+	if strings.HasPrefix(raw, "https://www.bilibili.com/") ||
+		strings.HasPrefix(raw, "https://bilibili.com/") ||
+		strings.HasPrefix(raw, "https://m.bilibili.com/") {
+		// Avoid advertised peer/MCDN endpoints on unreachable high ports before
+		// downloading either stream. If no regular-CDN combination exists,
+		// yt-dlp must fail explicitly rather than retry an MCDN endpoint.
+		format = "bv*[url!*=mcdn.bilivideo.cn]+ba[url!*=mcdn.bilivideo.cn]/b[url!*=mcdn.bilivideo.cn]"
+	}
 	args := []string{
 		"--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-overwrites",
 		"--no-cache-dir", "--no-colors", "--newline", "--progress",
@@ -87,7 +97,7 @@ func (t *Tools) downloadArgs(raw, cookies string) []string {
 		"--max-filesize", strconv.FormatInt(t.cfg.MaxBytes, 10),
 		"--match-filters", fmt.Sprintf("!is_live & duration <= %.3f", t.cfg.MaxDuration),
 		"--ffmpeg-location", t.cfg.FFmpeg,
-		"--format", "bv*+ba/b", "--merge-output-format", "mp4", "--remux-video", "mp4",
+		"--format", format, "--merge-output-format", "mp4", "--remux-video", "mp4",
 		"--write-subs", "--write-auto-subs", "--sub-langs", "zh-Hans,zh-CN,zh,en",
 		"--sub-format", "srt/vtt/best", "--convert-subs", "srt",
 		"--output", "source.%(ext)s",

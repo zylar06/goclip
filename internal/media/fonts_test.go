@@ -9,7 +9,32 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"autoclip-go/internal/domain"
+	"golang.org/x/image/font/sfnt"
 )
+
+func TestASSUsesBundledFontFamily(t *testing.T) {
+	font, err := New(Config{}).loadFont("NotoSansSC-StaticBold.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	family, err := font.Name(nil, sfnt.NameIDFamily)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caption := "中文測試字幕 简体繁體"
+	ass := string(formatASS([]domain.Cue{{Start: 0, End: 1, Text: caption}}, 640, 360))
+	if !strings.Contains(ass, "Style: Default,"+family+",") {
+		t.Fatalf("ASS must request bundled font's legacy family %q, not rely on system fallback: %s", family, ass)
+	}
+	for _, r := range caption {
+		glyph, err := font.GlyphIndex(nil, r)
+		if err != nil || glyph == 0 {
+			t.Fatalf("bundled subtitle font lacks %q: %v", r, err)
+		}
+	}
+}
 
 func TestFontLicensesAndChecksums(t *testing.T) {
 	dir := New(Config{}).cfg.FontDir

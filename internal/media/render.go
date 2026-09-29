@@ -138,12 +138,45 @@ func escapeASS(text string) string {
 	return strings.NewReplacer(`\`, `\\`, "{", `\{`, "}", `\}`, "\n", `\N`).Replace(text)
 }
 
+func subtitleFontSize(w, h int) int {
+	return max(12, int(float64(min(w, h))*.048))
+}
+
+func (t *Tools) subtitleASS(cues []domain.Cue, w, h int) (data []byte, err error) {
+	faces, err := t.titleFaces("NotoSansSC-StaticBold.ttf", float64(subtitleFontSize(w, h)))
+	if err != nil {
+		return nil, fmt.Errorf("subtitle font: %w", err)
+	}
+	defer func() { err = errors.Join(err, faces.close()) }()
+	// Older libass builds do not wrap CJK without spaces. Explicit line breaks
+	// use the bundled font's real metrics, leaving room for outlines/shaping.
+	width := w - 2*(w/15) - 2*max(1, h/540) - subtitleFontSize(w, h)/5
+	height := h - 2*max(6, h/16)
+	wrapped := make([]domain.Cue, len(cues))
+	for i, cue := range cues {
+		text := strings.ReplaceAll(normalizeText(cue.Text), "\t", " ")
+		lines, e := wrapTitle(faces, text, width)
+		if e != nil {
+			return nil, fmt.Errorf("subtitle cue %d: %w", i+1, e)
+		}
+		if len(lines)*faces.latin.Metrics().Height.Ceil() > height {
+			return nil, fmt.Errorf("subtitle cue %d has too many lines to fit the frame; split or edit it", i+1)
+		}
+		wrapped[i] = cue
+		wrapped[i].Text = strings.Join(lines, "\n")
+	}
+	return formatASS(wrapped, w, h), nil
+}
+
 func formatASS(cues []domain.Cue, w, h int) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n", w, h)
 	b.WriteString("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	fmt.Fprintf(&b, "Style: Default,Noto Sans SC,%d,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,%d,0,2,%d,%d,%d,1\n\n",
-		max(12, int(float64(min(w, h))*.048)), max(1, h/540), w/15, w/15, max(6, h/16))
+	// The pinned weight-700 static instance retains this legacy family name.
+	// libass resolves embedded fonts by that name, not the typographic family
+	// "Noto Sans SC"; the latter silently falls back to missing CJK glyphs.
+	fmt.Fprintf(&b, "Style: Default,Noto Sans SC Thin,%d,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,%d,0,2,%d,%d,%d,1\n\n",
+		subtitleFontSize(w, h), max(1, h/540), w/15, w/15, max(6, h/16))
 	b.WriteString("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 	for _, cue := range cues {
 		start := math.Round(cue.Start*100) / 100
@@ -231,6 +264,10 @@ func (t *Tools) Render(ctx context.Context, source, outDir, output string, draft
 		return Info{}, err
 	}
 	if subtitles {
+		captions, e := t.subtitleASS(timedCues, plan.width, plan.height)
+		if e != nil {
+			return Info{}, e
+		}
 		fontData, e := readLimited(filepath.Join(t.cfg.FontDir, "NotoSansSC-StaticBold.ttf"), 32<<20)
 		if e != nil {
 			return Info{}, fmt.Errorf("subtitle font: %w", e)
@@ -241,7 +278,7 @@ func (t *Tools) Render(ctx context.Context, source, outDir, output string, draft
 		if err = os.WriteFile(filepath.Join(dir, "fonts", "NotoSansSC-StaticBold.ttf"), fontData, 0600); err != nil {
 			return Info{}, err
 		}
-		if err = os.WriteFile(filepath.Join(dir, "captions.ass"), formatASS(timedCues, plan.width, plan.height), 0600); err != nil {
+		if err = os.WriteFile(filepath.Join(dir, "captions.ass"), captions, 0600); err != nil {
 			return Info{}, err
 		}
 	}

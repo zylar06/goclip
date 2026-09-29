@@ -254,3 +254,48 @@ enabled and the fixed model hash was verified. No system configuration changed.
 Actual remote yt-dlp downloading, Docker execution, Linux runtime cancellation
 and race-detector execution remain unverified locally; downloader orchestration
 is covered by deterministic fake-tool tests and Linux cancellation tests compile.
+
+Update: 2026-09-29T17:31:00+08:00 — Real Bilibili acceptance of
+`BV1TRhs6hEQp` reproduced an audio-download failure after the video stream
+completed: an advertised `mcdn.bilivideo.cn:8082` peer refused the connection.
+The pinned yt-dlp extractor exposes primary format URLs, not backup URL choices.
+Bilibili downloads now select video/audio/combined formats excluding that MCDN
+domain before downloading either stream. Selection stays within the extractor's
+advertised formats and retains ordinary TLS/signature checks; it does not rewrite
+signed URLs, extract browser cookies, change the installed desktop or retry a
+failed paid task. Available codec/bitrate/quality may differ, and no eligible
+non-MCDN video/audio combination is an explicit failure. YouTube selection is
+unchanged. A regression first reproduced the old unsafe selection; the completed
+real-video outcome is recorded in verification.md after rerunning acceptance.
+
+Update: 2026-09-29T17:50:00+08:00 — Frame inspection of the real Bilibili MP4
+found boxed/missing Chinese subtitles despite successful rendering. The bundled
+weight-700 static font retains the legacy family `Noto Sans SC Thin`; libass
+did not match the typographic family `Noto Sans SC` for its private embedded
+font. Linux then fell back to DejaVu (missing CJK), while installed Windows CJK
+fonts masked the defect. ASS now requests the exact legacy family without
+changing any font binary, license or checksum. New metadata/glyph and native
+FFmpeg font-selection regressions reproduced the old behavior before the fix;
+the native test rejects missing-glyph/system-fallback diagnostics.
+
+Update: 2026-09-29T17:56:00+08:00 — The same sample exposed long unspaced CJK
+cues overflowing the video width in Debian's libass. Subtitle preparation now
+wraps with the bundled static font's measured glyph advances (preserving Latin
+words where possible), before ASS escaping. Cue times and stored ASR text are
+unchanged; only render-time line breaks and whitespace normalization change.
+Missing glyphs/fonts and a cue too tall for the frame fail explicitly instead
+of publishing unreadable text. Unit checks cover landscape/portrait sizing,
+timing/text preservation, tabs/newlines and rejection; native FFmpeg checks
+also verify glyph selection and rendered pixels stay inside frame margins.
+This is layout correction, not speech-recognition accuracy improvement.
+
+Update: 2026-09-29T17:59:00+08:00 — Final Windows full suite passed **252 events**
+with real Chinese Whisper enabled, no failures/skips, plus `go vet`. The final
+runtime Linux image also passed **66 media test events**, including the new
+private CJK-font selection/pixel-bounds check, real Whisper and process-group
+cancellation. The native test container had no network or application data
+volumes and was removed afterward. Real `BV1TRhs6hEQp` import yielded 56 cues;
+its final 30–60s manual slice exported and independently verified as a 30s
+H.264/AAC MP4. See verification.md for the exact artifact/hash and final frames.
+ASR word errors and overlapping pre-existing hard captions remain content
+review issues; no paid AI highlight selection or transcript correction was run.

@@ -1,0 +1,2 @@
+# Shell scripts must remain executable by Linux sh even when checked out on Windows.
+*.sh text eol=lf

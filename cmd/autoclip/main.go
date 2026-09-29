@@ -107,6 +107,9 @@ func run() error {
 			slog.Error("database close", "error", e)
 		}
 	}()
+	if e := applyModelEnvironment(s, mode, os.Getenv); e != nil {
+		return e
+	}
 	m := media.New(media.Config{FFmpeg: env("FFMPEG_PATH", "ffmpeg"), FFprobe: env("FFPROBE_PATH", "ffprobe"), YTDLP: env("YTDLP_PATH", "yt-dlp"), Whisper: env("WHISPER_PATH", "whisper-cli"), Model: env("WHISPER_MODEL", "models/ggml-base.bin"), FontDir: env("FONT_DIR", "assets/fonts"), MaxBytes: maxBytes, MaxDuration: float64(maxDuration)})
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -89,3 +89,58 @@ func TestASSEscaping(t *testing.T) {
 		t.Fatalf("ASS text escaped incorrectly: %s", out)
 	}
 }
+
+func TestSubtitleASSWrapsLongCJK(t *testing.T) {
+	tools := New(Config{})
+	text := strings.Repeat("这是没有空格的长中文字幕，需要完整显示。", 4)
+	cues := []domain.Cue{{Start: .25, End: 5.75, Text: text}}
+	for _, dimensions := range [][2]int{{640, 360}, {1080, 1920}, {1920, 1080}} {
+		w, h := dimensions[0], dimensions[1]
+		data, err := tools.subtitleASS(cues, w, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := string(data)
+		prefix := "Dialogue: 0,0:00:00.25,0:00:05.75,Default,,0,0,0,,"
+		_, body, ok := strings.Cut(out, prefix)
+		if !ok {
+			t.Fatalf("subtitle timings changed: %s", out)
+		}
+		lines := strings.Split(strings.TrimSuffix(body, "\n"), `\N`)
+		if len(lines) < 2 || strings.Join(lines, "") != text || cues[0].Text != text {
+			t.Fatalf("long cue not wrapped losslessly: %q", lines)
+		}
+		faces, err := tools.titleFaces("NotoSansSC-StaticBold.ttf", float64(subtitleFontSize(w, h)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := faces.close(); err != nil {
+				t.Error(err)
+			}
+		})
+		for _, line := range lines {
+			width, err := faces.measure(line)
+			if err != nil || width.Ceil() > w-2*(w/15) {
+				t.Fatalf("subtitle exceeds safe width: %d at %dx%d: %v", width.Ceil(), w, h, err)
+			}
+		}
+	}
+}
+
+func TestSubtitleASSRejectsUnrenderableText(t *testing.T) {
+	tools := New(Config{})
+	for _, text := range []string{"missing \U0010FFFF", strings.Repeat("太长", 2000)} {
+		if _, err := tools.subtitleASS([]domain.Cue{{Start: 0, End: 1, Text: text}}, 640, 360); err == nil {
+			t.Fatal("missing glyphs or subtitles taller than the frame must fail explicitly")
+		}
+	}
+	if _, err := New(Config{FontDir: t.TempDir()}).subtitleASS(
+		[]domain.Cue{{Start: 0, End: 1, Text: "中文"}}, 640, 360); err == nil {
+		t.Fatal("missing subtitle font must fail explicitly")
+	}
+	data, err := tools.subtitleASS([]domain.Cue{{Start: 0, End: 1, Text: "hello\tworld\n中文"}}, 640, 360)
+	if err != nil || !strings.Contains(string(data), `hello world\N中文`) {
+		t.Fatalf("tabs or explicit newlines mishandled: %s %v", data, err)
+	}
+}

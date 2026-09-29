@@ -36,3 +36,10 @@ of the static Noto font for subtitles, avoiding reliance on installed CJK fonts.
 
 Update: 2026-09-29 — copied original licensed fonts; added reproducible static
 Noto Bold instance and checksum/variable-table regression tests.
+
+Update: 2026-09-29T17:50:00+08:00 — The static font's legacy family name remains
+`Noto Sans SC Thin`, although its outlines/OS/2 weight are the fixed Bold (700)
+instance. ASS must request this exact legacy family so libass selects the
+private font instead of relying on a system CJK fallback. The typographic
+family `Noto Sans SC` did not match in the verified Linux/Windows libass builds.
+No font file, license or checksum was changed.
