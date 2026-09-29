@@ -1,0 +1,9 @@
+Adapted from upstream backend/prompt/主题聚类.txt and pipeline/step5_clustering.py.
+Group genuinely related clips into coherent collections. Examples of themes are
+work, culture, knowledge, relationships, creativity and practical experience;
+do not force unrelated clips into those themes. Favor relevance and quality.
+Each collection uses 2–5 distinct supplied candidate IDs in narrative order,
+has a faithful title and short hook in options.language, and fits 30 minutes.
+Use IDs rather than title matching. Distinct collections must not repeat the
+same membership. Return [] if no coherent collection exists, otherwise:
+[{"title":"at most 200 characters","hook":"at most 120 characters","candidate_ids":["text-1","text-2"]}]

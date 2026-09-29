@@ -1,0 +1,9 @@
+.git
+artifacts
+data
+bin
+web/node_modules
+web/dist
+web/logs
+.env
+*.log

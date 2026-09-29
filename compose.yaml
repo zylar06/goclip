@@ -1,0 +1,53 @@
+name: autoclip-go
+x-common: &common
+  image: autoclip-go:0.1.0
+  build: .
+  platform: linux/amd64
+  init: true
+  restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  tmpfs:
+    - /tmp:rw,exec,nosuid,size=1g,uid=10001,gid=10001,mode=1770
+  volumes:
+    - data:/data
+    - models:/models
+  environment:
+    MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-4294967296}
+    MAX_VIDEO_SECONDS: ${MAX_VIDEO_SECONDS:-7200}
+    TASK_TIMEOUT_SECONDS: ${TASK_TIMEOUT_SECONDS:-21600}
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+services:
+  web:
+    <<: *common
+    command: [web]
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${PORT:-8080}:8080"
+    healthcheck:
+      test: [CMD, autoclip, healthcheck]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 4
+  worker:
+    <<: *common
+    command: [worker]
+    stop_grace_period: 30s
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, autoclip, healthcheck, worker]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 4
+volumes:
+  data:
+  models:

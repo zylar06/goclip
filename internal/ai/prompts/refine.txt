@@ -1,0 +1,10 @@
+Adapted from upstream backend/services/studio/intelligence.py boundary review.
+Recheck ONLY the supplied event against these local timestamped still images.
+Preserve the event ID, necessary setup and visible outcome, without absorbing a
+neighboring independent event. Do not invent inter-frame motion or speech.
+Bounds must stay inside the supplied window and options.duration; supporting
+frame_times must be exact provided timestamps and lie within the event.
+Use the same events schema as the initial scan, with EXACTLY one event. Correct
+kind to menu/reward_screen/loading if the evidence proves it is non-play content.
+If evidence is insufficient, return {"events":[]} rather than inventing a result.
+Do not claim frame-accurate boundaries: these are sampled stills.

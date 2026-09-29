@@ -1,0 +1,54 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { api, errorText } from '../api/client'
+import { terminal, type Task } from '../api/contracts'
+import type { Connection } from '../api/taskMonitor'
+import { Btn, Dialog, ProgressLine, Section } from '../ui'
+
+export default function TaskPanel({ tasks, connections = {}, onRefresh }: {
+  tasks: Task[]; connections?: Record<string, { state: Connection; message: string }>; onRefresh: () => void
+}) {
+  const { t } = useTranslation()
+  const [action, setAction] = useState<{ task: Task; kind: 'retry' | 'cancel' } | null>(null)
+  const [consent, setConsent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const act = async () => {
+    if (!action || (action.kind === 'retry' && !consent)) return
+    setBusy(true); setError('')
+    try {
+      const result = await api[action.kind](action.task.id)
+      setNotice(result.cancel_requested ? 'Cancellation request accepted.' : action.kind === 'retry' ? 'Retry queued.' : 'Task cancelled.')
+      setAction(null); setConsent(false); onRefresh()
+    } catch (cause) { setError(errorText(cause)) }
+    finally { setBusy(false) }
+  }
+  return <Section title={t('Tasks')} count={tasks.length} right={<Btn size="sm" onClick={onRefresh}>{t('Refresh / reconnect')}</Btn>}>
+    {!tasks.length && <p className="studio-muted">{t('No tasks yet.')}</p>}
+    {tasks.map(task => <article className="web-task" key={task.id} aria-label={`${task.kind} ${task.id}`}>
+      <div className="studio-row"><b>{t(task.kind)} · {t(task.status)}</b><span className="ac-mono">{task.progress === null ? t('Progress unavailable') : `${task.progress}%`}</span></div>
+      <p>{t('Stage')}: {task.stage || '—'}</p>
+      {!terminal(task) && <ProgressLine percent={task.progress} />}
+      {!!task.completed_steps?.length && <p className="studio-muted">{t('Completed steps')}: {task.completed_steps.join(' → ')}</p>}
+      <p className="studio-muted">{t('Heartbeat')}: {task.heartbeat || '—'}{connections[task.id] && !terminal(task) && ` · ${t(connections[task.id].state)}`}</p>
+      {!terminal(task) && task.heartbeat && Date.now() - Date.parse(task.heartbeat) > 120000 &&
+        <p role="status">{t('Worker heartbeat is stale. Check server health; no automatic retry will be sent.')}</p>}
+      {connections[task.id]?.message && !terminal(task) && <p className="web-warning" role="status">{t(connections[task.id].message)}</p>}
+      {task.error && <p className="studio-error" role="alert">{task.error}</p>}
+      {task.cancel_requested && !terminal(task) && <p role="status">{t('Cancellation requested. Waiting for the worker to stop.')}</p>}
+      <div className="studio-actions">
+        {!terminal(task) && <Btn size="sm" disabled={busy || task.cancel_requested} onClick={() => { setError(''); setAction({ task, kind: 'cancel' }) }}>{t('Cancel task')}</Btn>}
+        {terminal(task) && task.retryable && task.status !== 'completed' &&
+          <Btn size="sm" disabled={busy} onClick={() => { setError(''); setConsent(false); setAction({ task, kind: 'retry' }) }}>{t('Retry task…')}</Btn>}
+      </div>
+    </article>)}
+    {notice && <p role="status">{t(notice)}</p>}
+    <Dialog open={!!action} onClose={() => !busy && setAction(null)} title={t(action?.kind === 'retry' ? 'Confirm paid retry' : 'Cancel this task?')}
+      description={t(action?.kind === 'retry' ? 'Retry may repeat paid model calls. Previous charges are not refunded. No retry happens automatically.' : 'A running task stays running until its child process stops. Work already billed may still incur charges.')}
+      footer={<div className="studio-actions"><Btn disabled={busy} onClick={() => setAction(null)}>{t('Keep task unchanged')}</Btn><Btn variant="cta" loading={busy} disabled={action?.kind === 'retry' && !consent} onClick={act}>{t(action?.kind === 'retry' ? 'Confirm retry' : 'Request cancellation')}</Btn></div>}>
+      {action?.kind === 'retry' && <label><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> {t('I understand and approve possible additional charges.')}</label>}
+      {error && <p className="studio-error" role="alert">{error}</p>}
+    </Dialog>
+  </Section>
+}

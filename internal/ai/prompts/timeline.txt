@@ -1,0 +1,12 @@
+Adapted from upstream backend/prompt/时间点.txt and pipeline/step2_timeline.py.
+Locate the supplied topics in this exact subtitle chunk. Start on the first core
+sentence, finish after the last relevant sentence, preserve a complete thought,
+and exclude unrelated lead-in/outro. Never blindly set all ends to the chunk end.
+Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
+descriptions of the same discussion may later be merged. Include useful opening
+and closing content. All bounds must quote cue boundaries in source seconds.
+The supplied profile overrides every podcast-specific duration rule: keep clips
+between min_seconds and max_seconds where source evidence permits. Do not add
+silence or invent content merely to satisfy a minimum. Prefer adjacent related
+discussion for short fragments. Return only a nonempty JSON array:
+[{"topic_id":"topic-1","start":0.0,"end":30.0}]

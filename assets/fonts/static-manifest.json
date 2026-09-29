@@ -1,0 +1,15 @@
+{
+  "source": "NotoSansSC.ttf",
+  "source_sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+  "file": "NotoSansSC-StaticBold.ttf",
+  "sha256": "984cc8f1b8463689f39f653c783188a3914b2ea4bc084db240569d5e6473d035",
+  "license": "NotoSansSC-OFL.txt",
+  "tool": "fontTools.varLib.instancer 4.60.1",
+  "axes": {
+    "wght": 700
+  },
+  "recalcTimestamp": false,
+  "variable_tables_remaining": [],
+  "unicode_cmap_entries": 30890,
+  "generated": "2026-09-29"
+}

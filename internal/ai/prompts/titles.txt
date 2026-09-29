@@ -1,0 +1,9 @@
+Adapted from upstream backend/prompt/标题生成.txt and pipeline/step4_title.py.
+Write one concise, engaging but faithful title for each selected candidate.
+Use the subtitle excerpt or visible evidence to identify the central point.
+No invented outcomes, unsupported claims, exaggerated clickbait or outside facts.
+For promo goals a short question/challenge/hook is welcome only if evidence
+supports it. Respect options.language (source means the source material language).
+Return exactly one object per supplied candidate ID:
+[{"id":"text-1","title":"at most 200 characters","hook":"at most 120 characters, may be empty"}]
+Never change IDs or scene bounds.

@@ -1,0 +1,29 @@
+{
+  "updated_at": "2026-09-29",
+  "platform": "linux/amd64",
+  "debian_snapshot": "20260901T000000Z",
+  "go": "1.27.1",
+  "node": "22.23.3",
+  "base_images": {
+    "debian:bookworm-slim": "sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
+    "golang:1.27.1-bookworm": "sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195",
+    "node:22.23.3-bookworm-slim": "sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c"
+  },
+  "whisper_cpp": {
+    "version": "v1.9.4",
+    "sha256": "57e280cee375ab02425b806ad5146b99f6eb9357e3c2b31357c8a6af2e2e44ae"
+  },
+  "whisper_model": {
+    "name": "ggml-base.bin",
+    "size": 147951465,
+    "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
+  },
+  "yt_dlp": {
+    "version": "2026.08.19",
+    "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+  },
+  "deno": {
+    "version": "v2.9.7",
+    "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+  }
+}

@@ -1,0 +1,9 @@
+Adapted from upstream backend/prompt/推荐理由.txt and pipeline/step3_scoring.py.
+Evaluate each candidate using the verbatim subtitle excerpt in evidence, not
+only its topic label. Consider information value, emotional resonance, memorable
+moments, clarity and self-contained narrative. Goals highlight/content/promo
+change editorial emphasis, never justify inventing evidence or advertising results.
+Return exactly one assessment per supplied candidate ID, in any order:
+[{"id":"text-1","score":0.8,"reason":"specific evidence-grounded recommendation"}]
+score is a finite number between 0 and 1; reason is nonempty and at most 500
+characters. Never change bounds, omit candidates or introduce IDs.
