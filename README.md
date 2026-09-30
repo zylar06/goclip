@@ -59,6 +59,12 @@ docker compose up -d --build --wait --wait-timeout 180
 
 更新前先备份，等正在制作的任务结束再重启。视频、草稿和设置保存在 Docker 数据卷里，**不要用 `docker compose down -v` 排障，会删数据**。备份和恢复步骤见 `doc_auto/operations.md`。
 
+## 分支与检查
+
+- `main`：已合并版本。日常修改放功能分支，提交 PR；合并后清理旧分支。
+- 每个 PR 自动跑一项 `CI / test`，检查后端、前端和接口；连续提交会取消旧检查，不再同时跑 push 和 PR 两套。
+- 完整 Docker 构建与导入、导出验证改为手动运行：GitHub **Actions → 容器验证 → Run workflow**，选择准备部署的分支（本次配置合入 `main` 后出现入口）。**部署前执行**；代码检查通过不等于容器验证通过。
+
 ## 目录与文件说明
 
 找页面看 `web/src/pages/`，改剪辑器看 `web/src/features/studio/`；接口在 `internal/httpapi/`，后台任务在 `internal/worker/`，视频处理在 `internal/media/`。
@@ -85,7 +91,8 @@ autoclip-go/
 ├── tools.lock.json                   # 原生工具、模型及基础镜像的版本和校验值
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                    # GitHub 自动测试与容器检查
+│       ├── ci.yml                    # PR 自动代码检查，连续提交取消旧任务
+│       └── container.yml             # 部署前手动运行的完整容器验证
 ├── api/
 │   └── openapi.json                  # 自动生成的后端接口说明
 ├── cmd/                              # 可执行程序入口

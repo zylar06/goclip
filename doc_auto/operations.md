@@ -342,3 +342,30 @@ the aggregate media-package deadline. Race detection and the original 180-second
 package timeout stay enabled; Docker's ordinary tests/smoke are unchanged.
 The separate Linux /proc process-reaping assertion now handles ESRCH correctly.
 This changes verification configuration/tests only, not production services.
+
+Update: 2026-09-30T15:24:00+08:00 — Branch and CI cleanup at the user's request.
+
+Refreshed origin and checked GitHub PRs/branch protection before cleanup.
+PR #1 is merged and ad00550 is an ancestor of origin/main; deleted only the
+local/remote feat/docker-build-speed branch. Remote deletion used an exact-SHA
+lease to reject concurrent branch updates. Local main was fast-forwarded to
+6121f1a, without pushing to main. Kept feat/workflow-parity: PR #2 merged only
+through f8140bd, while its later README commit cebc1c1 belongs to open PR #3.
+No unmerged commit, PR, tag, service or data was deleted.
+
+ci.yml now provides one automatic test job for PRs targeting main, plus manual
+dispatch. Feature/main pushes no longer duplicate PR checks. Per-workflow/PR
+concurrency cancels superseded checks; no path filter leaves a PR waiting for an
+absent required status. Race/native tests, vet, generated API checks, frontend
+typecheck/tests/build and the original timeout remain. Browser-harness unit
+regressions now run alongside CI configuration regressions.
+
+Full Docker build/media smoke/restart verification moves unchanged to manually
+dispatched container.yml, retaining its 45-minute limit and always-uploaded logs.
+After this workflow reaches the default branch, run Actions -> 容器验证 ->
+Run workflow against the intended deployment branch before deploying.
+Tradeoff: ordinary PRs no longer automatically catch Docker packaging/runtime
+regressions. A green code check is not container acceptance. No full container
+build was requested or launched by this cleanup; deployment instructions and
+README explicitly retain the manual gate. GitHub reported no protected branches
+or active rulesets at inspection time; no repository protection setting changed.
