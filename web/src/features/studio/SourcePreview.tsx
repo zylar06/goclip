@@ -36,10 +36,10 @@ export function PreviewControls({ preview }: { preview: ReturnType<typeof useSou
   const { t } = useTranslation()
   const active = ['queued', 'running'].includes(preview.state.status)
   return <details className="studio-details" open={active || !!preview.error || !!preview.state.task?.error}>
-    <summary>{t('Playback compatibility')}</summary>
-    <p className="studio-muted">{t('Compatible preview is local conversion, not cloud analysis. Original media is retained.')}</p>
-    <p role="status">{t('Compatible preview')}: {t(preview.state.status)} {preview.state.task?.stage} {preview.state.task?.progress != null ? `${preview.state.task.progress}%` : ''}</p>
-    <Btn size="sm" disabled={active || preview.busy || preview.state.status === 'completed'} onClick={preview.start}>{t('Create compatible preview')}</Btn>
+    <summary>{t('Browser playback compatibility')}</summary>
+    <p className="studio-muted">{t('Use this only when the original cannot play. It converts the source locally for browser playback; it does not call models or apply edits.')}</p>
+    <div className="studio-compat-status" role="status"><span className={`studio-status-dot studio-status-dot--${preview.state.status}`} /> <span>{t('Compatible file')}</span><b>{t(preview.state.status)}</b>{preview.state.task?.stage && <small>{t(preview.state.task.stage)}{preview.state.task?.progress != null ? ` · ${preview.state.task.progress.toFixed(0)}%` : ''}</small>}</div>
+    <Btn size="sm" disabled={active || preview.busy || preview.state.status === 'completed'} onClick={preview.start}>{t('Create compatible file')}</Btn>
     <Btn size="sm" onClick={preview.refresh}>{t('Refresh preview status')}</Btn>
     {(preview.error || preview.state.task?.error) && <p role="alert" className="studio-error">{preview.error || preview.state.task?.error}</p>}
   </details>

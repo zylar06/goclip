@@ -106,7 +106,7 @@ describe('ported StudioEditor real behavior', () => {
     await user.click(screen.getByRole('button', { name: 'Add manual range' }))
     expect(screen.getAllByLabelText(t('起点（秒）'))).toHaveLength(2)
     expect(screen.getByLabelText(t('烧录原字幕'))).toBeChecked()
-    await user.click(screen.getByRole('button', { name: 'Source / choose cut points' }))
+    await user.click(screen.getByRole('button', { name: 'Source selection' }))
     expect(screen.getByLabelText('Source playback')).toBeInTheDocument()
   })
 })

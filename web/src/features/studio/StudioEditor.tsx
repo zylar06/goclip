@@ -120,7 +120,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
     {(error || newerServerDraft) && <p className="web-warning">{newerServerDraft && t('A newer saved revision is available. Local edits have not been overwritten.')} <Btn size="sm" disabled={!!busy} onClick={() => setShowReload(true)}>{t('Reload latest saved draft…')}</Btn></p>}
     <fieldset disabled={!!busy} className="studio-fieldset">
-      <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
+      <div className="studio-editor-grid"><section className="studio-workspace"><div className="studio-view-heading"><div><span className="studio-kicker">{t('Editing workspace')}</span><h2>{showRendered ? t('Rendered video') : sourceMode ? t('Source selection') : t('Draft simulation')}</h2><p className="studio-muted">{showRendered ? t('This is the exported MP4; judge the final effect here.') : sourceMode ? t('View the original media and choose shot boundaries; draft effects are not applied here.') : t('Play the original media in draft order to check shots and copy; this is not the final MP4.')}</p></div><span className={`studio-view-state${showRendered ? ' studio-view-state--done' : ''}`}>{showRendered ? t('Ready') : t('Not rendered yet')}</span></div><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame">
           {showRendered && previewUrl ? <video aria-label={t('Completed MP4')} controls src={previewUrl} /> :
             <DraftPlayer src={preview.src} scenes={draft.scenes} sourceMode={sourceMode} selected={selected}
@@ -130,9 +130,9 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
               {!sourceMode && draft.title_enabled !== false && draft.hook && <TitleArtwork projectId={projectId} draft={draft}/>}
             </DraftPlayer>}
         </div>
-      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 字幕以渲染结果为准")}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={() => setShowExport(true)}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div>
-        <div className="studio-actions"><Btn size="sm" aria-pressed={!sourceMode && !showRendered} onClick={() => { setSourceMode(false); setShowRendered(false) }}>{t('Play full draft')}</Btn>
-          <Btn size="sm" aria-pressed={sourceMode && !showRendered} onClick={() => { setSourceMode(true); setShowRendered(false) }}>{t('Source / choose cut points')}</Btn></div>
+      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("Rendered file"):sourceMode?t("Original media · for selecting cut points"):t("Draft simulation · subtitles and packaging are shown in the final video")}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("Back to draft simulation"):t("View rendered video")}</Btn> : <Btn size="sm" disabled={!!active} onClick={() => setShowExport(true)}>{active?t("Rendering video"):t("Render video")}</Btn>}</div>
+        <div className="studio-view-switcher" role="group" aria-label={t('View mode')}><Btn size="sm" aria-pressed={!sourceMode && !showRendered} onClick={() => { setSourceMode(false); setShowRendered(false) }}>{t('Draft simulation')}</Btn>
+          <Btn size="sm" aria-pressed={sourceMode && !showRendered} onClick={() => { setSourceMode(true); setShowRendered(false) }}>{t('Source selection')}</Btn>{previewUrl && <Btn size="sm" aria-pressed={showRendered} onClick={() => { setShowRendered(true); setSourceMode(false) }}>{t('Rendered video')}</Btn>}</div>
         <PreviewControls preview={preview}/>
         </section>
       <aside className="studio-edit-panel"><h2>{t("Clip settings")}</h2><Btn size="sm" onClick={() => patch(portraitDesign(draft))}>{t("应用竖屏推荐")}</Btn><label className="studio-field">{t("成片名称")}<input maxLength={200} value={draft.title} onChange={e => patch({title:e.target.value})} /></label>
