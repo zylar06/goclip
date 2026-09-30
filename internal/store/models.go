@@ -28,7 +28,7 @@ func (s *Store) PutModels(models map[string]domain.ModelSettings) error {
 		}
 		encrypted[kind] = b
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}

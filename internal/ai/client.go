@@ -26,12 +26,19 @@ import (
 )
 
 const (
-	requestTimeout   = 90 * time.Second
-	maxResponseBytes = 2 << 20
-	maxPromptBytes   = 512 << 10
-	maxImageBytes    = 4 << 20
-	maxImagesBytes   = 24 << 20
-	maxFrames        = 60
+	requestTimeout = 90 * time.Second
+	// A vision scan sends up to 60 images in one request; providers take far
+	// longer to produce the first response byte than for a text prompt. Live
+	// qwen3-vl-plus scans of a 300-second source exceeded the 45-second header
+	// cap and failed as timeouts after the request was already billed, so image
+	// requests get their own longer budget while text keeps the tight one.
+	visionRequestTimeout = 300 * time.Second
+	responseHeaderCap    = 240 * time.Second
+	maxResponseBytes     = 2 << 20
+	maxPromptBytes       = 512 << 10
+	maxImageBytes        = 4 << 20
+	maxImagesBytes       = 24 << 20
+	maxFrames            = 60
 )
 
 // Client is immutable after New and safe for concurrent requests. Invalid
@@ -51,7 +58,8 @@ func New(settings domain.ModelSettings) *Client {
 		c.endpoint, c.err = endpointURL(settings.BaseURL)
 	}
 	c.http = &http.Client{
-		Timeout: requestTimeout,
+		// Per-request deadlines below bound each call; this is the outer ceiling.
+		Timeout: visionRequestTimeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -59,7 +67,7 @@ func New(settings domain.ModelSettings) *Client {
 			Proxy:                  http.ProxyFromEnvironment,
 			DialContext:            (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 			TLSHandshakeTimeout:    10 * time.Second,
-			ResponseHeaderTimeout:  45 * time.Second,
+			ResponseHeaderTimeout:  responseHeaderCap,
 			IdleConnTimeout:        60 * time.Second,
 			MaxIdleConns:           8,
 			MaxConnsPerHost:        4,
@@ -158,14 +166,16 @@ type imageURL struct {
 }
 
 // Test performs exactly one independent smoke request. The vision test sends
-// an actual in-memory 8x8 red PNG and checks the answer, not just text support.
+// an actual in-memory 64x64 red PNG and checks the answer, not just text support.
 func (c *Client) Test(ctx context.Context, vision bool) error {
 	prompt := "Connection test. Reply with exactly OK."
 	var parts []contentPart
 	if vision {
-		img := image.NewRGBA(image.Rect(0, 0, 8, 8))
-		for y := 0; y < 8; y++ {
-			for x := 0; x < 8; x++ {
+		// Avoid tiny fixtures rejected by vision providers (e.g. DashScope).
+		const size = 64
+		img := image.NewRGBA(image.Rect(0, 0, size, size))
+		for y := 0; y < size; y++ {
+			for x := 0; x < size; x++ {
 				img.Set(x, y, color.RGBA{R: 255, A: 255})
 			}
 		}
@@ -289,7 +299,13 @@ func (c *Client) complete(ctx context.Context, prompt string, parts []contentPar
 	if err != nil {
 		return "", invalid("Could not encode model request.")
 	}
-	bounded, cancel := context.WithTimeout(ctx, requestTimeout)
+	// Image requests take substantially longer than text ones; the parent
+	// context can still shorten either.
+	deadline := requestTimeout
+	if len(parts) > 0 {
+		deadline = visionRequestTimeout
+	}
+	bounded, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
 	req, err := http.NewRequestWithContext(bounded, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -329,11 +345,26 @@ func (c *Client) complete(ctx context.Context, prompt string, parts []contentPar
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
 	}
-	if !utf8.Valid(data) || checkJSON(data) != nil || json.Unmarshal(data, &response) != nil || len(response.Choices) != 1 || (len(response.Error) > 0 && string(response.Error) != "null") {
+	// Upstream intelligence.py indexes choices[0] and ignores extras, and rejects
+	// only the two finish reasons that mean the answer is unusable. Requiring
+	// exactly one choice, allowlisting finish reasons, and failing on any
+	// non-null `error` key made whole families of OpenAI-compatible gateways
+	// unusable here while working in the Python app — several emit `"error":{}`
+	// alongside a valid HTTP 200 choice, or report `eos`/`end_turn`/`STOP`.
+	if !utf8.Valid(data) || checkJSON(data) != nil || json.Unmarshal(data, &response) != nil || len(response.Choices) == 0 {
 		return "", invalid("Provider did not return one valid Chat Completions choice; verify the compatible endpoint.")
 	}
+	// A populated top-level error still wins over any choice: a gateway reporting
+	// a real failure alongside filler content must not be read as success. An
+	// empty object or null is only noise that some gateways always include.
+	if reportsError(response.Error) {
+		return "", invalid("Provider reported an error alongside its answer; verify the compatible endpoint and model access.")
+	}
 	choice := response.Choices[0]
-	if choice.FinishReason != "" && choice.FinishReason != "stop" {
+	// Only the reasons that mean the text is incomplete or withheld are fatal;
+	// an unrecognized completion label is not evidence of a bad answer.
+	switch strings.ToLower(strings.TrimSpace(choice.FinishReason)) {
+	case "length", "content_filter", "max_tokens", "tool_calls", "function_call":
 		return "", invalid("Provider output was truncated, filtered, or not a completed text answer; no retry was made.")
 	}
 	if choice.Message.Refusal != "" || choice.Message.Content == nil || strings.TrimSpace(*choice.Message.Content) == "" {
@@ -350,9 +381,13 @@ func transportError(ctx context.Context, err error) error {
 	if errors.As(err, &timeout) && timeout.Timeout() {
 		e := failure(CodeTimeout, "Model request timed out; retry only with explicit consent.")
 		e.cause = context.DeadlineExceeded
+		e.transientNetwork = true
 		return e
 	}
-	return failure(CodeEndpoint, "Cannot reach the compatible API or its connection was interrupted; check address, TLS and network.")
+	e := failure(CodeEndpoint, "Cannot reach the compatible API or its connection was interrupted; check address, TLS and network.")
+	var network *net.OpError
+	e.transientNetwork = errors.As(err, &network) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+	return e
 }
 
 func statusError(status int, data []byte) error {
@@ -399,4 +434,21 @@ func statusError(status int, data []byte) error {
 	}
 	e.HTTPStatus = status
 	return e
+}
+
+// reportsError distinguishes a gateway's real error object from the empty
+// placeholder some compatible servers always include. Requiring the key to be
+// absent or literally null rejected valid HTTP 200 responses from those servers,
+// which is why upstream ignores the key entirely; this keeps the useful half of
+// the check without the false positives.
+func reportsError(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" || trimmed == "{}" || trimmed == "[]" || trimmed == `""` {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) == nil {
+		return len(object) > 0
+	}
+	return true
 }

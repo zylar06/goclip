@@ -6,9 +6,39 @@ import (
 	"testing"
 	"time"
 
+	"autoclip-go/internal/ai"
 	"autoclip-go/internal/domain"
 	"autoclip-go/internal/store"
 )
+
+func TestNoHighlightsDoesNotOfferBlindRetry(t *testing.T) {
+	s, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	project := domain.Project{ID: domain.ID(), Name: "no highlights"}
+	if _, err := s.CreateProject(project, domain.ImportPayload{}); err != nil {
+		t.Fatal(err)
+	}
+	job, err := s.Claim(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := Worker{Store: s, Execute: func(context.Context, domain.Task, domain.ProgressFunc) error {
+		return &ai.Error{Code: "no_highlights", Message: "No supported highlights; consider subtitles.", Stage: "01-visual-events"}
+	}}
+	if err := w.runTask(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Task(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "failed" || got.Retryable || got.Error == "" {
+		t.Fatalf("no-highlight result must remain explicit without a blind retry: %+v", got)
+	}
+}
 
 func TestAnalysisDoesNotPublishArtificialPercentages(t *testing.T) {
 	n := 0

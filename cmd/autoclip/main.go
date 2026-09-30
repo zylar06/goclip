@@ -114,33 +114,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if mode == "worker" {
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		heartbeatErr := make(chan error, 1)
-		go func() {
-			tick := time.NewTicker(5 * time.Second)
-			defer tick.Stop()
-			for {
-				if err := os.WriteFile(filepath.Join(s.Dir, "worker.heartbeat"), []byte(domainTime()), 0600); err != nil {
-					heartbeatErr <- err
-					cancel()
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-tick.C:
-				}
-			}
-		}()
-		w := &worker.Worker{Store: s, Media: m, MaxBytes: maxBytes, MaxDuration: float64(maxDuration), TaskTimeout: time.Duration(taskSeconds) * time.Second}
-		err := w.Run(ctx)
-		select {
-		case e := <-heartbeatErr:
-			return e
-		default:
-			return err
+		w := &worker.Worker{
+			Store: s, Media: m, MaxBytes: maxBytes, MaxDuration: float64(maxDuration),
+			TaskTimeout: time.Duration(taskSeconds) * time.Second,
+			// Run owns the OS execution lock before calling HealthBeat. A
+			// standby must not make a stalled lock owner appear healthy.
+			HealthBeat: func() error {
+				return os.WriteFile(filepath.Join(s.Dir, "worker.heartbeat"), []byte(domainTime()), 0600)
+			},
 		}
+		return w.Run(ctx)
 	}
 	a := &httpapi.API{Store: s, Media: m, Config: httpapi.Config{WebDir: env("AUTOCLIP_WEB_DIR", "web/dist"), Version: version, MaxBytes: maxBytes}}
 	addr := env("AUTOCLIP_ADDR", "127.0.0.1:8080")

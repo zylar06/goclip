@@ -130,20 +130,19 @@ func TestChangedKeyCanReplayButChangedModelCannot(t *testing.T) {
 	if _, _, err := AnalyzeText(context.Background(), New(settings), fixtureCues(), textOptions(), dir, nil); err != nil {
 		t.Fatal(err)
 	}
-	if model.count() != 5 {
+	if model.count() != 4 {
 		t.Fatal("key rotation needlessly invalidated valid stages")
 	}
 	settings.Model = "different-model"
 	_, _, err := AnalyzeText(context.Background(), New(settings), fixtureCues(), textOptions(), dir, nil)
 	assertCode(t, err, CodeInvalidResponse)
-	if model.count() != 5 {
+	if model.count() != 4 {
 		t.Fatal("model mismatch silently paid for new analysis")
 	}
 }
 
-func TestCheckpointsWithoutDirectoryAndEmptyCollections(t *testing.T) {
+func TestCheckpointsWithoutDirectory(t *testing.T) {
 	model := textModel()
-	model.replies["clustering"] = "[]"
 	client := model.client(t)
 	for i := 0; i < 2; i++ {
 		drafts, candidates, err := AnalyzeText(context.Background(), client, fixtureCues(), textOptions(), "", nil)
@@ -151,10 +150,10 @@ func TestCheckpointsWithoutDirectoryAndEmptyCollections(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(drafts) != 2 || len(candidates) != 2 {
-			t.Fatal("empty clusters should preserve individual drafts")
+			t.Fatal("expected one draft per selected candidate")
 		}
 	}
-	if model.count() != 10 {
+	if model.count() != 8 {
 		t.Fatal("empty directory must not use hidden global caches")
 	}
 }
@@ -203,8 +202,6 @@ func TestMultiChunkTextPipelineUsesExactChunkEvidence(t *testing.T) {
 			answer(t, w, `[{"id":"text-1","score":0.2,"reason":"one"},{"id":"text-2","score":0.3,"reason":"two"},{"id":"text-3","score":0.4,"reason":"three"}]`)
 		case "titles":
 			answer(t, w, `[{"id":"text-1","title":"One","hook":""},{"id":"text-2","title":"Two","hook":""},{"id":"text-3","title":"Three","hook":""}]`)
-		case "clustering":
-			answer(t, w, "[]")
 		default:
 			t.Error("unexpected chunk stage", stage)
 		}
@@ -215,7 +212,7 @@ func TestMultiChunkTextPipelineUsesExactChunkEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(drafts) != 3 || len(candidates) != 3 || calls.Load() != 9 {
+	if len(drafts) != 3 || len(candidates) != 3 || calls.Load() != 8 {
 		t.Fatal("multi-chunk pipeline lost evidence or reran stages")
 	}
 	for i, c := range candidates {

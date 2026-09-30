@@ -8,13 +8,13 @@ describe('Go HTTP adapter', () => {
   it('sends exact optimistic revision, duplicate and export bodies to documented routes', async () => {
     const fetch = mockHTTP(() => response(draft))
     await api.saveDraft('project1', draft)
-    await api.duplicate('project1', 'draft1', 'Copy', 'en')
+    await api.duplicate('project1', 'draft1', 'Copy')
     await api.export('project1', 'draft1', 7)
     expect(fetch.mock.calls.map(([path]) => path)).toEqual([
       '/api/v1/projects/project1/drafts/draft1', '/api/v1/projects/project1/drafts/draft1/duplicate', '/api/v1/projects/project1/drafts/draft1/export',
     ])
     expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual(draft)
-    expect(JSON.parse(fetch.mock.calls[1][1]!.body as string)).toEqual({ title: 'Copy', language: 'en' })
+    expect(JSON.parse(fetch.mock.calls[1][1]!.body as string)).toEqual({ title: 'Copy' })
     expect(JSON.parse(fetch.mock.calls[2][1]!.body as string)).toEqual({ revision: 7 })
   })
   it('preserves errors and request IDs and does not automatically retry mutations', async () => {

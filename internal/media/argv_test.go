@@ -1,6 +1,10 @@
 package media
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -74,7 +78,47 @@ func TestDownloadArgv(t *testing.T) {
 	}
 }
 
-func TestDownloadFormatAvoidsBilibiliMCDN(t *testing.T) {
+func TestDownloadSubtitlePolicyArgv(t *testing.T) {
+	tools := New(Config{})
+	for _, raw := range []string{"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "https://www.bilibili.com/video/BV1xx411c7mD"} {
+		legacy := tools.downloadArgs(raw, "private cookies.txt")
+		enabled := tools.downloadArgsWithSubtitles(raw, "private cookies.txt", true)
+		if !reflect.DeepEqual(legacy, enabled) {
+			t.Fatal("default subtitle policy changed legacy argv")
+		}
+		for _, flag := range []string{"--write-subs", "--write-auto-subs", "--sub-langs", "--sub-format", "--convert-subs"} {
+			if !hasArg(enabled, flag) {
+				t.Fatal("enabled subtitle option missing", flag)
+			}
+		}
+		disabled := tools.downloadArgsWithSubtitles(raw, "private cookies.txt", false)
+		for _, flag := range []string{"--write-subs", "--write-auto-subs", "--sub-langs", "--sub-format", "--convert-subs", "--embed-subs"} {
+			if hasArg(disabled, flag) {
+				t.Fatal("disabled subtitles still requested or converted", flag)
+			}
+		}
+		for _, flag := range []string{"--no-write-subs", "--no-write-auto-subs", "--ignore-config", "--no-plugin-dirs", "--no-playlist"} {
+			if !hasArg(disabled, flag) {
+				t.Fatal("missing suppression or safety flag", flag)
+			}
+		}
+		for _, flag := range []string{"--format", "--merge-output-format", "--remux-video", "--cookies", "--max-filesize", "--match-filters", "--output", "--ffmpeg-location"} {
+			if valueAfter(disabled, flag) != valueAfter(enabled, flag) {
+				t.Fatal("subtitle policy changed unrelated download option", flag)
+			}
+		}
+		if !reflect.DeepEqual(disabled[len(disabled)-2:], []string{"--", raw}) {
+			t.Fatal("subtitle policy changed positional URL boundary")
+		}
+	}
+}
+
+// The selector used to hard-exclude MCDN in every branch. Bilibili serves some
+// videos' only audio streams from MCDN, so that made the selection
+// unsatisfiable and the whole import failed with "Requested format is not
+// available" — verified against a real video whose three audio streams were all
+// MCDN. The preference must still lead with the regular CDN, but fall back.
+func TestDownloadFormatPrefersRegularCDNButFallsBackToMCDN(t *testing.T) {
 	tools := New(Config{})
 	for _, raw := range []string{
 		"https://www.bilibili.com/video/BV1TRhs6hEQp/",
@@ -82,9 +126,26 @@ func TestDownloadFormatAvoidsBilibiliMCDN(t *testing.T) {
 		"https://m.bilibili.com/video/BV1TRhs6hEQp",
 	} {
 		format := valueAfter(tools.downloadArgs(raw, ""), "--format")
-		want := "bv*[url!*=mcdn.bilivideo.cn]+ba[url!*=mcdn.bilivideo.cn]/b[url!*=mcdn.bilivideo.cn]"
-		if format != want {
-			t.Errorf("%s: format=%q, want %q", raw, format, want)
+		groups := strings.Split(format, "/")
+		if len(groups) < 2 {
+			t.Errorf("%s: selector has no fallback group: %q", raw, format)
+			continue
+		}
+		// yt-dlp takes the first satisfiable group, so the all-regular-CDN pair
+		// must come first for the preference to mean anything.
+		if !strings.Contains(groups[0], "bv*[url!*=mcdn.bilivideo.cn]+ba[url!*=mcdn.bilivideo.cn]") {
+			t.Errorf("%s: first choice is not an all-regular-CDN pair: %q", raw, groups[0])
+		}
+		// At least one later group must accept MCDN, or an MCDN-only audio track
+		// still leaves the selection unsatisfiable.
+		fallback := false
+		for _, g := range groups[1:] {
+			if !strings.Contains(g, "mcdn.bilivideo.cn") {
+				fallback = true
+			}
+		}
+		if !fallback {
+			t.Errorf("%s: every group excludes MCDN, so MCDN-only audio cannot resolve: %q", raw, format)
 		}
 	}
 	for _, raw := range []string{
@@ -210,4 +271,96 @@ func valueAfter(args []string, arg string) string {
 		}
 	}
 	return ""
+}
+
+// Bilibili's share sheet emits b23.tv links, which used to be rejected outright
+// — turning the most common way to share a video into an error. A well-formed
+// share code is now accepted at validation time; Download resolves the redirect
+// and revalidates the destination through the same rules, so the host allowlist
+// is unchanged and a short link pointing anywhere unsupported still fails.
+func TestShortLinkShapeAcceptedAndResolutionDeferred(t *testing.T) {
+	for _, raw := range []string{
+		"https://b23.tv/abcdefg",
+		"https://b23.tv/BV1P5h16JE8n",
+		"https://b23.tv/abcdefg/",
+	} {
+		if err := ValidateSourceURL(raw); err != nil {
+			t.Errorf("a well-formed share link must validate: %q: %v", raw, err)
+		}
+		// sourceURL stays pure: it reports that resolution is still required
+		// rather than performing a request, so the API can validate synchronously.
+		canonical, err := sourceURL(raw)
+		if !errors.Is(err, errShortLink) {
+			t.Errorf("%q: want errShortLink, got %v", raw, err)
+		}
+		if strings.HasSuffix(canonical, "/") || !strings.HasPrefix(canonical, "https://b23.tv/") {
+			t.Errorf("%q: unexpected canonical form %q", raw, canonical)
+		}
+	}
+	// Shapes that are not share codes stay rejected, including a nested path and
+	// any query, so this does not become a general redirect follower.
+	for _, raw := range []string{
+		"https://b23.tv/", "https://b23.tv/abc", "https://b23.tv/a/b",
+		"https://b23.tv/abcdefg?x=1", "https://b23.tv/" + strings.Repeat("a", 25),
+		"https://b23.tv/abc-def",
+	} {
+		if err := ValidateSourceURL(raw); err == nil {
+			t.Errorf("accepted malformed short link %q", raw)
+		}
+	}
+}
+
+// Resolution must revalidate: a short link that lands on a non-video page, a
+// foreign host, or another short link is rejected rather than followed.
+func TestShortLinkResolutionRevalidatesDestination(t *testing.T) {
+	tools := New(Config{FFmpeg: "ffmpeg", FFprobe: "ffprobe", YTDLP: "yt-dlp"})
+	for _, target := range []string{
+		"https://evil.test/video/BV1P5h16JE8n",
+		"https://www.bilibili.com/space/12345",
+		"https://b23.tv/nested1",
+		"",
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodHead {
+				t.Errorf("expected HEAD, got %s", r.Method)
+			}
+			if target != "" {
+				w.Header().Set("Location", target)
+			}
+			w.WriteHeader(http.StatusFound)
+		}))
+		_, err := tools.resolveShortLink(context.Background(), server.URL)
+		server.Close()
+		if err == nil {
+			t.Errorf("destination %q must be rejected", target)
+		}
+		// The message must not leak the resolved destination.
+		if err != nil && target != "" && strings.Contains(err.Error(), target) {
+			t.Errorf("error leaked the redirect target: %v", err)
+		}
+	}
+}
+
+// A share link that resolves to a real video page is accepted and canonicalized
+// exactly as if the user had pasted the full URL.
+func TestShortLinkResolvesToCanonicalVideoURL(t *testing.T) {
+	tools := New(Config{FFmpeg: "ffmpeg", FFprobe: "ffprobe", YTDLP: "yt-dlp"})
+	var hops int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hops++
+		w.Header().Set("Location", "https://www.bilibili.com/video/BV1P5h16JE8n/?spm_id_from=333.1391.0.0")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+	got, err := tools.resolveShortLink(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("a share link to a real video page must resolve: %v", err)
+	}
+	if got != "https://www.bilibili.com/video/BV1P5h16JE8n" {
+		t.Fatalf("resolved to %q, want the canonical video URL with tracking query dropped", got)
+	}
+	// Exactly one hop: the resolver inspects the redirect and never follows it.
+	if hops != 1 {
+		t.Fatalf("expected exactly one request, got %d", hops)
+	}
 }

@@ -1,22 +1,172 @@
-/* ===== AutoClip · Calm Premium design tokens (see DESIGN.md) ===== */
-:root{
-  --ac-bg:#F6F5F3; --ac-card:#FFFFFF; --ac-ink:#1A1A19; --ac-sub:#6E6B66; --ac-muted:#A8A59F;
-  --ac-line:#EBE9E4; --ac-line-2:#F0EEEA; --ac-accent:#2D6BFF; --ac-thumb:#EEECE8;
-  --ac-cta-bg:#1A1A19; --ac-cta-fg:#FFFFFF; --ac-ok:#5BB36A; --ac-error:#E66A5C; --ac-warn:#E6B23C;
-  --ac-font-sans:"Geist","PingFang SC","Noto Sans SC",system-ui,-apple-system,sans-serif;
-  --ac-font-serif:"Instrument Serif",Georgia,serif;
-  --ac-font-mono:"Geist Mono",ui-monospace,monospace;
-  --ac-shadow:0 1px 2px rgba(26,26,25,.03), 0 8px 24px rgba(26,26,25,.05);
-  --ac-ease-out:cubic-bezier(.2,.7,.2,1); --ac-t-micro:100ms; --ac-t-short:200ms;
-}
-[data-theme="dark"]{
-  --ac-bg:#19181A; --ac-card:#211F22; --ac-ink:#ECEAE6; --ac-sub:#A6A29B; --ac-muted:#76726C;
-  --ac-line:#2C2A2D; --ac-line-2:#232124; --ac-accent:#5A8BFF; --ac-thumb:#262428;
-  --ac-cta-bg:#ECEAE6; --ac-cta-fg:#19181A;
-  --ac-shadow:0 1px 2px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.28);
-}
-html,body,#root{background:var(--ac-bg);color:var(--ac-ink);}
-body{font-family:var(--ac-font-sans);-webkit-font-smoothing:antialiased;}
-.ac-serif{font-family:var(--ac-font-serif);}
-.ac-mono{font-family:var(--ac-font-mono);}
+/* =============================================================================
+   AutoClip · design tokens
+   Editing workbench: neutral surfaces, compact controls, video-first hierarchy.
+   Color communicates actions and task state, never decoration.
 
+   Every token is declared here on bare :root (light). The two dark blocks below
+   only REDEFINE tokens, so a component rule never has to know which theme is on.
+   ========================================================================== */
+:root{
+  /* --- surfaces: canvas → sunken → card → raised ------------------------- */
+  --ac-bg:#F6F7F9;
+  --ac-sunken:#ECEFF3;
+  --ac-card:#FFFFFF;
+  --ac-raised:#FFFFFF;
+  --ac-thumb:#ECEFF3;
+
+  /* --- ink: 4.5:1+ on bg, sunken and card in both themes ----------------- */
+  --ac-ink:#202631;
+  --ac-sub:#505C6B;
+  --ac-muted:#606C7A;
+
+  /* --- hairlines --------------------------------------------------------- */
+  --ac-line:#DCE1E7;
+  --ac-line-2:#E9ECF0;
+  --ac-line-strong:#AAB4C0;
+
+  /* --- one accent hue; semantic colors are separate and reserved --------- */
+  --ac-accent:#245BC4;
+  --ac-accent-strong:#184AA9;
+  --ac-accent-soft:#EBF1FD;
+  --ac-accent-ring:rgba(36,91,196,.24);
+
+  --ac-ok:#1B7040;        --ac-ok-soft:#E8F3EB;
+  --ac-warn:#8A5A0A;      --ac-warn-soft:#FBF1DE;
+  --ac-error:#BE3527;     --ac-error-soft:#FBEAE7;
+
+  /* --- inverted call-to-action ------------------------------------------ */
+  --ac-cta-bg:#245BC4;
+  --ac-cta-bg-hover:#184AA9;
+  --ac-cta-fg:#FFFFFF;
+
+  /* --- overlays (theme-independent by design: they sit on video) -------- */
+  --ac-scrim:rgba(26,25,23,.36);
+  --ac-overlay-fill:rgba(22,21,19,.72);
+  --ac-overlay-ink:#FFFFFF;
+  --ac-video-bed:#121110;
+
+  /* --- type -------------------------------------------------------------- */
+  --ac-font-sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",Roboto,Helvetica,Arial,sans-serif;
+  --ac-font-serif:Georgia,"Songti SC","Noto Serif SC","Times New Roman",serif;
+  --ac-font-mono:ui-monospace,SFMono-Regular,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",Menlo,"Noto Sans Mono",monospace;
+
+  --ac-t-xs:12px;
+  --ac-t-sm:13px;
+  --ac-t-base:14px;
+  --ac-t-md:15px;
+  --ac-t-lg:17px;
+  --ac-t-xl:21px;
+  --ac-t-2xl:26px;
+
+  /* --- spacing rhythm (4px base) ---------------------------------------- */
+  --ac-s-1:4px;  --ac-s-2:8px;  --ac-s-3:12px; --ac-s-4:16px;
+  --ac-s-5:20px; --ac-s-6:24px; --ac-s-8:32px; --ac-s-10:40px;
+  --ac-s-12:48px; --ac-s-14:56px;
+
+  /* --- radius ------------------------------------------------------------ */
+  --ac-r-sm:4px; --ac-r-md:6px; --ac-r-lg:8px; --ac-r-xl:10px; --ac-r-pill:5px;
+
+  /* --- elevation --------------------------------------------------------- */
+  --ac-shadow:none;
+  --ac-shadow-sm:none;
+  --ac-shadow-lg:0 2px 6px rgba(26,25,23,.06), 0 18px 48px rgba(26,25,23,.12);
+
+  /* --- motion ------------------------------------------------------------ */
+  --ac-ease-out:cubic-bezier(.2,.7,.2,1);
+  --ac-t-micro:110ms;
+  --ac-t-short:200ms;
+  --ac-t-long:400ms;
+
+  /* --- page gutter: never below 16px ------------------------------------ */
+  --ac-gutter:clamp(16px, 3vw, 40px);
+  color-scheme:light;
+}
+
+/* Dark values live in both blocks so the OS setting and an explicit
+   data-theme="dark" choice resolve to exactly the same palette. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ac-bg:#171B22;
+    --ac-sunken:#282F39;
+    --ac-card:#20262F;
+    --ac-raised:#282F39;
+    --ac-thumb:#282F39;
+
+    --ac-ink:#E8EDF4;
+    --ac-sub:#AFB9C7;
+    --ac-muted:#A2ADBD;
+
+    --ac-line:#38424F;
+    --ac-line-2:#2B333E;
+    --ac-line-strong:#566274;
+
+    --ac-accent:#93ACFF;
+    --ac-accent-strong:#AEC0FF;
+    --ac-accent-soft:#1A1E2E;
+    --ac-accent-ring:rgba(147,172,255,.34);
+
+    --ac-ok:#54C888;       --ac-ok-soft:#17241C;
+    --ac-warn:#DFAC4E;     --ac-warn-soft:#26200F;
+    --ac-error:#F28477;    --ac-error-soft:#2A1917;
+
+    --ac-cta-bg:#E8EDF4;
+    --ac-cta-bg-hover:#FFFFFF;
+    --ac-cta-fg:#171B22;
+
+    --ac-scrim:rgba(0,0,0,.6);
+
+    --ac-shadow:none;
+    --ac-shadow-sm:none;
+    --ac-shadow-lg:0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.56);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ac-bg:#171B22;
+  --ac-sunken:#282F39;
+  --ac-card:#20262F;
+  --ac-raised:#282F39;
+  --ac-thumb:#282F39;
+
+  --ac-ink:#E8EDF4;
+  --ac-sub:#AFB9C7;
+  --ac-muted:#A2ADBD;
+
+  --ac-line:#38424F;
+  --ac-line-2:#2B333E;
+  --ac-line-strong:#566274;
+
+  --ac-accent:#93ACFF;
+  --ac-accent-strong:#AEC0FF;
+  --ac-accent-soft:#1A1E2E;
+  --ac-accent-ring:rgba(147,172,255,.34);
+
+  --ac-ok:#54C888;       --ac-ok-soft:#17241C;
+  --ac-warn:#DFAC4E;     --ac-warn-soft:#26200F;
+  --ac-error:#F28477;    --ac-error-soft:#2A1917;
+
+  --ac-cta-bg:#E8EDF4;
+  --ac-cta-bg-hover:#FFFFFF;
+  --ac-cta-fg:#171B22;
+
+  --ac-scrim:rgba(0,0,0,.6);
+
+  --ac-shadow:none;
+  --ac-shadow-sm:none;
+  --ac-shadow-lg:0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.56);
+  color-scheme:dark;
+}
+
+html{background:var(--ac-bg);}
+body{
+  background:var(--ac-bg);
+  color:var(--ac-ink);
+  font-family:var(--ac-font-sans);
+  font-size:var(--ac-t-base);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+#root{background:var(--ac-bg);min-height:100%;display:flex;flex-direction:column;}
+.ac-serif{font-family:var(--ac-font-serif);}
+.ac-mono{font-family:var(--ac-font-mono);font-variant-numeric:tabular-nums;}

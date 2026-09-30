@@ -163,6 +163,7 @@ func TestIntegrationRenderConcatSubtitlesTitleTiming(t *testing.T) {
 		{ID: "blue", Start: 3, End: 6}, {ID: "red", Start: 0, End: 2},
 	})
 	d.TitleStyle, d.TitleMotion = "card", false
+	d.Subtitles = true // Test burning explicitly; new drafts default to subtitles off.
 	cues := []domain.Cue{{Start: 3.1, End: 3.7, Text: "Blue subtitle"}, {Start: .2, End: .6, Text: "Red subtitle"}}
 	out := filepath.Join(t.TempDir(), "export spaces' 中文")
 	var progress []float64
@@ -258,7 +259,7 @@ func TestIntegrationLayoutsAudioAndFrames(t *testing.T) {
 		})
 	}
 	frames, err := tools.Sample(context.Background(), source, t.TempDir(), 6, nil)
-	if err != nil || len(frames) != 1 || frames[0].Time != 0 {
+	if err != nil || len(frames) != 3 || frames[0].Time != 0 || frames[1].Time != 2 || frames[2].Time != 4 {
 		t.Fatalf("frames: %+v %v", frames, err)
 	}
 	f, err := os.Open(frames[0].Path)

@@ -26,16 +26,20 @@ var idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
 type Project struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	URL       string  `json:"url,omitempty"`
-	Status    string  `json:"status"`
-	Duration  float64 `json:"duration"`
-	Width     int     `json:"width"`
-	Height    int     `json:"height"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-	Error     string  `json:"error,omitempty"`
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	URL            string          `json:"url,omitempty"`
+	Status         string          `json:"status"`
+	Duration       float64         `json:"duration"`
+	Width          int             `json:"width"`
+	Height         int             `json:"height"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
+	Error          string          `json:"error,omitempty"`
+	HasAudio       *bool           `json:"has_audio,omitempty"`
+	SubtitleStatus string          `json:"subtitle_status,omitempty"`
+	SubtitleSource string          `json:"subtitle_source,omitempty"`
+	Plan           *ProductionPlan `json:"plan,omitempty"`
 }
 type Cue struct {
 	Start float64 `json:"start"`
@@ -60,13 +64,13 @@ type Draft struct {
 	Title                string  `json:"title"`
 	Hook                 string  `json:"hook"`
 	Scenes               []Scene `json:"scenes"`
-	Language             string  `json:"language"`
 	Aspect               string  `json:"aspect"`
 	Layout               string  `json:"layout"`
 	CropX                float64 `json:"crop_x"`
 	TitleStyle           string  `json:"title_style"`
 	TitleTemplateVersion int     `json:"title_template_version"`
 	TitleMotion          bool    `json:"title_motion"`
+	TitleEnabled         *bool   `json:"title_enabled,omitempty"`
 	TitleScale           float64 `json:"title_scale"`
 	TitleY               float64 `json:"title_y"`
 	TitleAccent          *string `json:"title_accent"`
@@ -77,12 +81,13 @@ type Draft struct {
 	Origin               string  `json:"origin"`
 	ParentDraftID        *string `json:"parent_draft_id,omitempty"`
 	ParentRevision       *int    `json:"parent_revision,omitempty"`
+	Goal                 string  `json:"goal,omitempty"`
 }
 
 var Styles = []string{"plain", "impact", "card", "comic", "neon", "arena", "editorial", "pixel", "frosted"}
 
 func NewDraft(title string, scenes []Scene) Draft {
-	return Draft{ID: ID(), Title: title, Scenes: scenes, Language: "source", Aspect: "original", Layout: "fit", CropX: .5, TitleStyle: "plain", TitleTemplateVersion: 1, TitleMotion: true, TitleScale: 1, TitleY: .12, Subtitles: true, OriginalAudio: true, Revision: 1, Origin: "manual", UpdatedAt: Now()}
+	return Draft{ID: ID(), Title: title, Scenes: scenes, Aspect: "original", Layout: "fit", CropX: .5, TitleStyle: "plain", TitleTemplateVersion: 1, TitleMotion: true, TitleScale: 1, TitleY: .12, Subtitles: false, OriginalAudio: true, Revision: 1, Origin: "manual", UpdatedAt: Now()}
 }
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 func (d Draft) Validate(duration float64) error {
@@ -95,7 +100,7 @@ func (d Draft) Validate(duration float64) error {
 	total := 0.0
 	ids := map[string]bool{}
 	for _, s := range d.Scenes {
-		if !ValidID(s.ID) || ids[s.ID] || len([]rune(s.Label)) > 120 || len([]rune(s.Evidence)) > 1000 || !finite(s.Start) || !finite(s.End) || s.Start < 0 || s.End-s.Start < .1 || s.End > duration+.05 {
+		if !ValidID(s.ID) || ids[s.ID] || len([]rune(s.Label)) > 120 || len([]rune(s.Evidence)) > 1000 || !finite(s.Start) || !finite(s.End) || s.Start < 0 || s.End-s.Start < .1 || s.End > duration+.001 {
 			return errors.New("invalid or out-of-range scene")
 		}
 		ids[s.ID] = true
@@ -104,7 +109,7 @@ func (d Draft) Validate(duration float64) error {
 	if total > 1800 {
 		return errors.New("draft exceeds 30 minutes")
 	}
-	if !slices.Contains([]string{"source", "zh", "en", "ja"}, d.Language) || !slices.Contains([]string{"original", "portrait", "landscape"}, d.Aspect) || !slices.Contains([]string{"fit", "crop", "blur"}, d.Layout) || !slices.Contains(Styles, d.TitleStyle) {
+	if !slices.Contains([]string{"original", "portrait", "landscape"}, d.Aspect) || !slices.Contains([]string{"fit", "crop", "blur"}, d.Layout) || !slices.Contains(Styles, d.TitleStyle) {
 		return errors.New("invalid draft options")
 	}
 	if !finite(d.CropX) || d.CropX < 0 || d.CropX > 1 || !finite(d.TitleScale) || d.TitleScale < .75 || d.TitleScale > 1.2 || !finite(d.TitleY) || d.TitleY < .06 || d.TitleY > .70 {
@@ -137,6 +142,9 @@ type Task struct {
 	Retryable       bool            `json:"retryable"`
 	CancelRequested bool            `json:"cancel_requested"`
 	Payload         json.RawMessage `json:"payload,omitempty"`
+	WorkflowID      string          `json:"workflow_id,omitempty"`
+	Goal            string          `json:"goal,omitempty"`
+	LeaseID         string          `json:"lease_id,omitempty"`
 }
 
 func (t Task) Terminal() bool {
@@ -151,14 +159,15 @@ type Export struct {
 	CreatedAt string `json:"created_at"`
 }
 type AnalysisOptions struct {
-	Mode        string   `json:"mode"`
-	AllowVisual bool     `json:"allow_visual"`
-	Confirmed   bool     `json:"confirmed"`
-	Goals       []string `json:"goals"`
-	Duration    int      `json:"duration"`
-	Aspect      string   `json:"aspect"`
-	Language    string   `json:"language"`
-	Instruction string   `json:"instruction"`
+	Mode          string   `json:"mode"`
+	AllowVisual   bool     `json:"allow_visual"`
+	Confirmed     bool     `json:"confirmed"`
+	Goals         []string `json:"goals"`
+	Duration      int      `json:"duration"`
+	Aspect        string   `json:"aspect"`
+	Category      string   `json:"category,omitempty"`
+	Instruction   string   `json:"instruction"`
+	BurnSubtitles bool     `json:"burn_subtitles,omitempty"`
 }
 type ModelSettings struct {
 	BaseURL string `json:"base_url"`
@@ -174,9 +183,10 @@ type ExportPayload struct {
 	Draft Draft `json:"draft"`
 }
 type ImportPayload struct {
-	Video    string `json:"video"`
-	Subtitle string `json:"subtitle"`
-	URL      string `json:"url"`
+	Video       string `json:"video"`
+	Subtitle    string `json:"subtitle"`
+	URL         string `json:"url"`
+	Instruction string `json:"instruction,omitempty"`
 }
 type ProgressFunc func(stage string, percent *float64) error
 type Frame struct {

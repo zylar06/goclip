@@ -36,7 +36,6 @@ export const studioApi = {
   },
   save: api.saveDraft,
   duplicate: api.duplicate,
-  rewrite: api.rewrite,
   titlePreview: api.titlePreview,
   export: api.export,
 }

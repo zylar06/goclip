@@ -36,7 +36,7 @@ console.log('project',project.id)
 await wait(project.id)
 const draft=await post(`/projects/${project.id}/drafts`,{
   title:'Docker 中文测试',hook:'GO 自动剪辑',scenes:[{id:'scene1',label:'test',start:0,end:2,evidence:''}],
-  language:'source',aspect:'original',layout:'fit',crop_x:.5,title_style:'comic',
+  aspect:'original',layout:'fit',crop_x:.5,title_style:'comic',
   title_template_version:6,title_motion:true,title_scale:1,title_y:.12,
   title_accent:null,subtitles:true,original_audio:true,revision:1
 })

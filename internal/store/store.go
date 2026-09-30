@@ -21,6 +21,7 @@ type Store struct {
 	DB    *sql.DB
 	Dir   string
 	vault *Vault
+	lease *domain.Task
 }
 
 func Open(dir string) (*Store, error) {
@@ -31,7 +32,7 @@ func Open(dir string) (*Store, error) {
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", filepath.ToSlash(filepath.Join(dir, "autoclip.db"))+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	db, err := sql.Open("sqlite", filepath.ToSlash(filepath.Join(dir, "autoclip.db"))+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if schemaVersion > 1 {
+	if schemaVersion > 2 {
 		db.Close()
 		return nil, errors.New("database schema is newer than this application; restore a matching backup to downgrade")
 	}
@@ -55,7 +56,9 @@ CREATE TABLE IF NOT EXISTS candidates(project_id TEXT PRIMARY KEY REFERENCES pro
 CREATE TABLE IF NOT EXISTS exports(task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS secrets(name TEXT PRIMARY KEY, ciphertext BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS assets(project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, kind TEXT NOT NULL, path TEXT NOT NULL, PRIMARY KEY(project_id,kind));
-PRAGMA user_version=1;`); err != nil {
+CREATE TABLE IF NOT EXISTS workflows(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, plan_revision INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(project_id,plan_revision));
+CREATE TABLE IF NOT EXISTS workflow_candidates(workflow_id TEXT PRIMARY KEY REFERENCES workflows(id) ON DELETE CASCADE, body TEXT NOT NULL);
+PRAGMA user_version=2;`); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -120,7 +123,7 @@ func (s *Store) CreateProject(p domain.Project, payload domain.ImportPayload) (d
 	if err != nil {
 		return t, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return t, err
 	}
@@ -162,13 +165,15 @@ func (s *Store) Project(id string) (p domain.Project, err error) {
 	return
 }
 func (s *Store) UpdateProject(p domain.Project) error {
-	p.UpdatedAt = domain.Now()
-	b, err := encode(p)
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
-	r, err := s.DB.Exec("UPDATE projects SET body=? WHERE id=?", b, p.ID)
-	return affected(r, err)
+	defer tx.Rollback()
+	if err = saveProjectTx(tx, p); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func affected(r sql.Result, err error) error {
 	if err != nil {
@@ -188,7 +193,7 @@ func (s *Store) Queue(pid, kind string, payload any) (domain.Task, error) {
 	if err != nil {
 		return t, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return t, err
 	}
@@ -243,7 +248,7 @@ func saveTask(tx *sql.Tx, t domain.Task, oldStatus string) error {
 	return affected(r, err)
 }
 func (s *Store) Claim(ctx context.Context) (domain.Task, error) {
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := s.beginContext(ctx)
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -254,15 +259,21 @@ func (s *Store) Claim(ctx context.Context) (domain.Task, error) {
 		return t, err
 	}
 	t.Status = "running"
+	t.LeaseID = domain.ID()
 	t.Heartbeat = domain.Now()
 	t.UpdatedAt = t.Heartbeat
 	if err = saveTask(tx, t, "queued"); err != nil {
 		return t, err
 	}
+	if t.WorkflowID != "" {
+		if err = refreshWorkflowTx(tx, t.WorkflowID); err != nil {
+			return t, err
+		}
+	}
 	return t, tx.Commit()
 }
 func (s *Store) Progress(id, stage string, percent *float64) error {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
@@ -288,7 +299,7 @@ func (s *Store) Progress(id, stage string, percent *float64) error {
 	return tx.Commit()
 }
 func (s *Store) Heartbeat(id string) error {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
@@ -307,7 +318,7 @@ func (s *Store) Heartbeat(id string) error {
 	return tx.Commit()
 }
 func (s *Store) Finish(id, status, message string, retryable bool) error {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
@@ -316,30 +327,13 @@ func (s *Store) Finish(id, status, message string, retryable bool) error {
 	if err = decode(tx.QueryRow("SELECT body FROM tasks WHERE id=?", id), &t); err != nil {
 		return err
 	}
-	if t.Status != "running" {
-		return ErrConflict
-	}
-	// Cancellation and completion serialize in this transaction. A cancellation
-	// accepted before completion must not subsequently become a successful task.
-	if t.CancelRequested {
-		status, message, retryable = "cancelled", "Cancelled by user", true
-	}
-	t.Status = status
-	t.Error = message
-	t.Retryable = retryable
-	t.Heartbeat = domain.Now()
-	if status == "completed" {
-		v := 100.0
-		t.Progress = &v
-		t.CompletedSteps = append(t.CompletedSteps, t.Stage)
-	}
-	if err = saveTask(tx, t, "running"); err != nil {
+	if err = finishTaskTx(tx, t, status, message, retryable); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 func (s *Store) Cancel(id string) (domain.Task, error) {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -363,10 +357,20 @@ func (s *Store) Cancel(id string) (domain.Task, error) {
 	if err = saveTask(tx, t, old); err != nil {
 		return t, err
 	}
+	if t.Terminal() {
+		if err = syncProjectTx(tx, t); err != nil {
+			return t, err
+		}
+	}
+	if t.WorkflowID != "" {
+		if err = refreshWorkflowTx(tx, t.WorkflowID); err != nil {
+			return t, err
+		}
+	}
 	return t, tx.Commit()
 }
 func (s *Store) Retry(id string) (domain.Task, error) {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return domain.Task{}, err
 	}
@@ -394,6 +398,14 @@ func (s *Store) Retry(id string) (domain.Task, error) {
 	if err = saveTask(tx, t, old); err != nil {
 		return t, err
 	}
+	if err = syncProjectTx(tx, t); err != nil {
+		return t, err
+	}
+	if t.WorkflowID != "" {
+		if err = refreshWorkflowTx(tx, t.WorkflowID); err != nil {
+			return t, err
+		}
+	}
 	return t, tx.Commit()
 }
 func (s *Store) Recover(before time.Time) (int, error) {
@@ -408,23 +420,42 @@ func (s *Store) Recover(before time.Time) (int, error) {
 	n := 0
 	for _, t := range tasks {
 		oldHeartbeat := t.Heartbeat
+		tx, e := s.begin()
+		if e != nil {
+			return n, e
+		}
+		var current domain.Task
+		if e = decode(tx.QueryRow("SELECT body FROM tasks WHERE id=?", t.ID), &current); e != nil {
+			tx.Rollback()
+			return n, e
+		}
+		if current.Status != "running" || current.Heartbeat != oldHeartbeat {
+			tx.Rollback()
+			continue
+		}
+		t = current
 		t.Status = "interrupted"
 		t.Error = "Worker heartbeat expired; review before retrying paid requests"
 		t.Retryable = true
 		t.UpdatedAt = domain.Now()
-		b, e := encode(t)
-		if e != nil {
+		if e = saveTask(tx, t, "running"); e != nil {
+			tx.Rollback()
 			return n, e
 		}
-		r, e := s.DB.Exec("UPDATE tasks SET status='interrupted',body=? WHERE id=? AND status='running' AND heartbeat=?", b, t.ID, oldHeartbeat)
-		if e != nil {
+		if e = syncProjectTx(tx, t); e != nil {
+			tx.Rollback()
 			return n, e
 		}
-		count, e := r.RowsAffected()
-		if e != nil {
+		if t.WorkflowID != "" {
+			if e = refreshWorkflowTx(tx, t.WorkflowID); e != nil {
+				tx.Rollback()
+				return n, e
+			}
+		}
+		if e = tx.Commit(); e != nil {
 			return n, e
 		}
-		n += int(count)
+		n++
 	}
 	return n, nil
 }
@@ -486,16 +517,16 @@ func (s *Store) SaveAnalysis(taskID, pid string, drafts []domain.Draft, candidat
 	if err != nil {
 		return err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var status string
-	if err = tx.QueryRow("SELECT status FROM tasks WHERE id=?", taskID).Scan(&status); err != nil {
+	var task domain.Task
+	if err = decode(tx.QueryRow("SELECT body FROM tasks WHERE id=?", taskID), &task); err != nil {
 		return err
 	}
-	if status != "running" {
+	if task.Status != "running" || task.CancelRequested || task.ProjectID != pid {
 		return ErrConflict
 	}
 	for _, d := range drafts {
@@ -529,11 +560,14 @@ func (s *Store) Candidates(pid string) (out []domain.Candidate, err error) {
 	return
 }
 func (s *Store) QueueExport(pid, id string, revision int) (domain.Task, error) {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return domain.Task{}, err
 	}
 	defer tx.Rollback()
+	if err = importReadyTx(tx, pid); err != nil {
+		return domain.Task{}, err
+	}
 	var d domain.Draft
 	if err = decode(tx.QueryRow("SELECT body FROM drafts WHERE id=? AND project_id=?", id, pid), &d); err != nil {
 		return domain.Task{}, err
@@ -587,7 +621,7 @@ func (s *Store) Exports(pid string) ([]domain.Export, error) {
 	return out, rows.Err()
 }
 func (s *Store) DeleteProject(id string) error {
-	tx, err := s.DB.Begin()
+	tx, err := s.begin()
 	if err != nil {
 		return err
 	}
@@ -640,8 +674,15 @@ func (s *Store) SetAsset(pid, kind, path string) error {
 	if !filepath.IsLocal(path) {
 		return errors.New("asset path must be project-relative")
 	}
-	_, err := s.DB.Exec("INSERT INTO assets VALUES(?,?,?) ON CONFLICT(project_id,kind) DO UPDATE SET path=excluded.path", pid, kind, path)
-	return err
+	tx, err := s.begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT INTO assets VALUES(?,?,?) ON CONFLICT(project_id,kind) DO UPDATE SET path=excluded.path", pid, kind, path); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Store) Asset(pid, kind string) (string, error) {
 	var rel string

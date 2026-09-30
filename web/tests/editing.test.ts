@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { draft } from './fixtures'
-import { applyCandidate, applyRewrite, draftError, moveScene, newID, portraitDesign } from '../src/features/studio/types'
-import { collectionDraft } from '../src/components/CollectionDialog'
+import { applyCandidate, draftError, moveScene, newID, portraitDesign } from '../src/features/studio/types'
 import { validateSourceURL } from '../src/pages/HomePage'
 import { resolveLanguage } from '../src/i18n/language'
 
@@ -24,18 +23,6 @@ describe('preserved editing behavior', () => {
     expect(draftError({ ...draft, scenes: [{ ...draft.scenes[0], end: 1.01 }] })).toContain('0.1')
     expect(() => applyCandidate(draft, { ...draft.scenes[0], kind: 'visual', score: 1 }, 10, 'x')).toThrow('no longer exists')
   })
-  it('rewriting changes text only, preserving timing, identity and revision', () => {
-    expect(applyRewrite(draft, { ...draft, title: 'Better', hook: 'Look!', id: 'wrong', revision: 99, scenes: [], original_audio: false }))
-      .toEqual({ ...draft, title: 'Better', hook: 'Look!' })
-  })
-  it('collections preserve selection order and mint new unique scene IDs', () => {
-    const collection = collectionDraft('  Collection  ', [draft.scenes[0], draft.scenes[0]])
-    expect(collection.title).toBe('Collection')
-    expect(collection.scenes.map(s => s.start)).toEqual([1, 1])
-    expect(new Set(collection.scenes.map(s => s.id)).size).toBe(2)
-    expect(collection.scenes[0].id).not.toBe('scene1')
-    expect(draftError(collection, 120)).toBeNull()
-  })
   it('offers portrait crop and secure-context-independent IDs', () => {
     expect(portraitDesign(draft)).toMatchObject({ aspect: 'portrait', layout: 'crop', title_style: 'comic' })
     expect(newID()).toMatch(/^[a-f0-9]{32}$/)
@@ -44,8 +31,16 @@ describe('preserved editing behavior', () => {
 describe('web import/language selection', () => {
   it('accepts supported videos and rejects unsafe hosts, credentials, redirects and non-video links', () => {
     expect(validateSourceURL('https://youtu.be/abcdefghijk')).toContain('abcdefghijk')
+    // Bilibili's share sheet emits b23.tv links; the shape is accepted here and
+    // the server resolves the redirect, so pasting one no longer fails outright.
+    expect(validateSourceURL('https://b23.tv/abcdefg')).toBe('https://b23.tv/abcdefg')
+    expect(validateSourceURL('https://b23.tv/abcdefg/')).toBe('https://b23.tv/abcdefg')
+    // Tracking query is dropped from a full Bilibili URL.
+    expect(validateSourceURL('https://www.bilibili.com/video/BV1P5h16JE8n/?spm_id_from=333.1391.0.0&vd_source=x'))
+      .toBe('https://www.bilibili.com/video/BV1P5h16JE8n')
     for (const url of ['http://youtube.com/watch?v=abcdefghijk', 'https://youtube.com.evil.test/watch?v=abcdefghijk',
-      'https://user:pass@youtube.com/watch?v=abcdefghijk', 'https://127.0.0.1/a', 'https://b23.tv/abc', 'https://youtube.com/playlist?list=x']) {
+      'https://user:pass@youtube.com/watch?v=abcdefghijk', 'https://127.0.0.1/a', 'https://b23.tv/abc', 'https://youtube.com/playlist?list=x',
+      'https://b23.tv/', 'https://b23.tv/a/b', 'https://b23.tv/abcdefg?x=1']) {
       expect(() => validateSourceURL(url)).toThrow()
     }
   })

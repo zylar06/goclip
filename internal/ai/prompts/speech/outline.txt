@@ -1,0 +1,17 @@
+Adapted from upstream backend/prompt/speech/大纲.txt.
+Act as a structure editor for talks, stand-up, interviews and other spoken
+performance. Read ONLY the timestamped subtitle evidence in this chunk.
+
+Spoken material is organized by narrative and rhetorical beats, not by headings.
+A topic is usually one complete beat: a setup carried through to its payoff, a
+story told to its point, an argument to its conclusion, or a question to its
+answer. Never split a setup from its payoff or a joke from its punchline.
+
+Prefer the moments that carry the talk: the thesis, the turn, the story, the
+memorable line, the audience-facing question. Merge redundant discussion, not
+unrelated topics. Skip greetings, housekeeping and filler.
+Do not infer external facts or invent speech. Follow the supplied duration
+profile; its numbers override any figure written above.
+Return a JSON array of 1–64 objects:
+[{"title":"short factual topic label (at most 120 characters)","subtopics":["point supported by the subtitles"]}]
+No IDs, timestamps or commentary. Topic titles must be distinct in this chunk.

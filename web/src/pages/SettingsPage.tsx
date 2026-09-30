@@ -29,7 +29,7 @@ export function ModelForm({ kind, initial }: { kind: ModelKind; initial: ModelSt
     } catch (cause) { setError(errorText(cause)) } finally { setBusy('') }
   }
   const label = kind === 'text' ? 'Text' : 'Vision'
-  return <Section title={t(`${label} model`)} description={t(kind === 'text' ? 'Used for subtitle analysis, rewriting, and translation.' : 'Used only when you explicitly approve sampled image analysis.')}>
+  return <Section title={t(`${label} model`)} description={t(kind === 'text' ? 'Used for subtitle analysis and clip titles.' : 'Used only when you explicitly approve sampled image analysis.')}>
     <form onSubmit={e => { e.preventDefault(); void run('save') }}>
       <fieldset disabled={!!busy} className="studio-fieldset" aria-label={t(`${label} model settings`)}>
         <label className="studio-field">{t(`${label} base URL`)}<input type="url" required value={baseURL} onChange={e => setBaseURL(e.target.value)} placeholder="https://provider.example/v1" /></label>
@@ -37,15 +37,15 @@ export function ModelForm({ kind, initial }: { kind: ModelKind; initial: ModelSt
         <label className="studio-field">{t(`${label} API key`)}<input type="password" value={key} onChange={e => setKey(e.target.value)} autoComplete="new-password" placeholder={t(saved.configured ? 'Leave empty to preserve the saved key' : 'Enter API key')} /></label>
         <p className="studio-muted">{t(saved.configured ? 'A key is configured on the server.' : 'No saved key configured.')} {t('An empty key preserves the existing key; it never clears it.')}</p>
         <p className="studio-muted">{t('Tests call the saved model and may incur a small charge. Unsaved form values are never sent by Test.')}</p>
-        {dirty && <p role="status">{t('Unsaved changes. Save first to test these values.')}</p>}
-        <div className="studio-actions">
+        {dirty && <p role="status" className="web-warning">{t('Unsaved changes. Save first to test these values.')}</p>}
+        <div className="studio-actions studio-import-submit">
           <Btn variant="cta" type="submit" loading={busy === 'save'} disabled={!baseURL.trim() || !model.trim()}>{t(`Save ${kind} settings`)}</Btn>
           <Btn disabled={!saved.configured} loading={busy === 'test'} onClick={() => run('test')}>{t(`Test saved ${kind} settings`)}</Btn>
         </div>
       </fieldset>
     </form>
     {error && <p role="alert" className="studio-error">{error}</p>}
-    {notice && <p role="status">{t(notice)}</p>}
+    {notice && <p role="status" className="web-note">{t(notice)}</p>}
   </Section>
 }
 export function CookiesForm({ initial }: { initial: boolean }) {
@@ -74,10 +74,10 @@ export function CookiesForm({ initial }: { initial: boolean }) {
     catch (cause) { setError(errorText(cause)) } finally { setBusy(false) }
   }
   return <Section title={t('Import cookies')} description={t('Optional Netscape cookies.txt for restricted Bilibili / YouTube imports. Cookies are sensitive and shared by all server users; never upload someone else’s credentials.')}>
-    <p>{t(configured ? 'Cookies configured' : 'No cookies configured')}</p>
+    <p><span className={`web-pill${configured ? ' web-pill--ok' : ''}`}>{t(configured ? 'Cookies configured' : 'No cookies configured')}</span></p>
     <label className="studio-field">{t('Netscape cookies file')}<input key={inputVersion} disabled={busy} type="file" accept=".txt" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
-    <div className="studio-actions"><Btn disabled={busy || !file} onClick={upload}>{t('Upload cookies')}</Btn><Btn variant="danger" disabled={busy || !configured} onClick={() => { setError(''); setRemoving(true) }}>{t('Remove cookies…')}</Btn></div>
-    {notice && <p role="status">{t(notice)}</p>}
+    <div className="studio-actions"><Btn disabled={busy || !file} loading={busy && !removing} onClick={upload}>{t('Upload cookies')}</Btn><Btn variant="danger" disabled={busy || !configured} onClick={() => { setError(''); setRemoving(true) }}>{t('Remove cookies…')}</Btn></div>
+    {notice && <p role="status" className="web-note">{t(notice)}</p>}
     {error && !removing && <p role="alert" className="studio-error">{error}</p>}
     <Dialog open={removing} onClose={() => !busy && setRemoving(false)} title={t('Remove shared cookies?')} description={t('Future imports may need authentication again.')}
       footer={<div className="studio-actions"><Btn disabled={busy} onClick={() => setRemoving(false)}>{t('Keep cookies')}</Btn><Btn variant="danger" loading={busy} onClick={remove}>{t('Confirm removal')}</Btn></div>}>
@@ -96,10 +96,11 @@ export default function SettingsPage() {
       .catch(cause => { if (!controller.signal.aborted) setError(errorText(cause)) })
     return () => controller.abort()
   }, [version])
-  return <main className="ac-page ac-page--narrow"><h1 className="ac-title">{t('Settings')}</h1>
+  return <main className="ac-page ac-page--narrow web-settings"><h1 className="ac-title">{t('Settings')}</h1>
     <p className="ac-sub">{t('Text and vision settings are saved and tested independently. Keys stay on the server, not in local storage.')}</p>
-    {error && <p role="alert" className="studio-error">{error} <Btn onClick={() => setVersion(v => v + 1)}>{t('Retry')}</Btn></p>}
-    {!settings && !error && <p role="status">{t('Loading settings…')}</p>}
-    {settings && <><ModelForm kind="text" initial={settings.text} /><ModelForm kind="vision" initial={settings.vision} /><CookiesForm initial={settings.cookies_configured} /></>}
+    {error && <p role="alert" className="studio-error">{error} <Btn size="sm" onClick={() => setVersion(v => v + 1)}>{t('Retry')}</Btn></p>}
+    {!settings && !error && <div className="ac-loading" role="status" aria-label={t('Loading settings…')}><span className="studio-sr">{t('Loading settings…')}</span><div className="ac-skeleton" /><div className="ac-skeleton" /></div>}
+    {settings && <><div className="web-model-grid"><ModelForm kind="text" initial={settings.text} /><ModelForm kind="vision" initial={settings.vision} /></div><CookiesForm initial={settings.cookies_configured} /></>}
+    <p className="web-installation-note">GoClip {__APP_VERSION__}<br />{t('Trusted LAN / VPN only. Shared projects and cloud costs.')}</p>
   </main>
 }

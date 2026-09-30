@@ -73,7 +73,7 @@ func response(s object, code string) object {
 	return object{code: object{"description": "Success", "content": object{"application/json": object{"schema": s}}}, "default": object{"description": "Explicit error", "content": object{"application/json": object{"schema": ref("Error")}}}}
 }
 func main() {
-	for _, v := range []any{domain.Project{}, domain.Task{}, domain.Draft{}, domain.Scene{}, domain.Candidate{}, domain.Cue{}, domain.Export{}, domain.ModelSettings{}, domain.ModelStatus{}, domain.AnalysisOptions{}} {
+	for _, v := range []any{domain.Project{}, domain.Task{}, domain.Draft{}, domain.Scene{}, domain.Candidate{}, domain.Cue{}, domain.Export{}, domain.ModelSettings{}, domain.ModelStatus{}, domain.AnalysisOptions{}, domain.ProductionPlan{}, domain.PlanUpdate{}, domain.ConfirmProduction{}, domain.InspectOptions{}, domain.GoalResult{}, domain.Workflow{}, domain.PreviewStatus{}} {
 		t := reflect.TypeOf(v)
 		models[t.Name()] = t
 	}
@@ -83,6 +83,7 @@ func main() {
 	}
 	schemas["Error"] = object{"type": "object", "properties": object{"code": object{"type": "string"}, "message": object{"type": "string"}, "retryable": object{"type": "boolean"}, "request_id": object{"type": "string"}}, "required": []string{"code", "message", "retryable", "request_id"}}
 	schemas["Workspace"] = object{"type": "object", "properties": object{"project": ref("Project"), "drafts": object{"type": "array", "items": ref("Draft")}, "tasks": object{"type": "array", "items": ref("Task")}, "candidates": object{"type": "array", "items": ref("Candidate")}, "exports": object{"type": "array", "items": ref("Export")}}, "required": []string{"project", "drafts", "tasks", "candidates", "exports"}}
+	schemas["Workspace"].(object)["properties"].(object)["workflows"] = object{"type": "array", "items": ref("Workflow")}
 	paths := object{}
 	add := func(method, path, name, out, status string, in object) {
 		res := ref(out)
@@ -113,17 +114,27 @@ func main() {
 	add("get", "/health", "health", "", "200", nil)
 	add("get", "/version", "version", "", "200", nil)
 	add("get", "/projects", "listProjects", "Project[]", "200", nil)
-	add("post", "/projects", "createProject", "Project", "201", object{"type": "object", "properties": object{"name": object{"type": "string"}, "url": object{"type": "string"}}, "required": []string{"url"}})
-	paths["/projects"].(object)["post"].(object)["requestBody"].(object)["content"].(object)["multipart/form-data"] = object{"schema": object{"type": "object", "properties": object{"name": object{"type": "string"}, "video": object{"type": "string", "format": "binary"}, "subtitle": object{"type": "string", "format": "binary"}}, "required": []string{"video"}}}
+	add("post", "/projects", "createProject", "Project", "201", object{"type": "object", "properties": object{"name": object{"type": "string"}, "url": object{"type": "string"}, "instruction": object{"type": "string", "maxLength": 4000}}, "required": []string{"url"}})
+	paths["/projects"].(object)["post"].(object)["requestBody"].(object)["content"].(object)["multipart/form-data"] = object{"schema": object{
+		"type":       "object",
+		"properties": object{"name": object{"type": "string"}, "url": object{"type": "string"}, "instruction": object{"type": "string", "maxLength": 4000}, "video": object{"type": "string", "format": "binary"}, "subtitle": object{"type": "string", "format": "binary"}},
+		"oneOf":      []any{object{"required": []string{"video"}, "not": object{"required": []string{"url"}}}, object{"required": []string{"url"}, "not": object{"required": []string{"video"}}}},
+	}}
 	add("get", "/projects/{id}", "getWorkspace", "Workspace", "200", nil)
+	add("get", "/projects/{id}/plan", "getPlan", "ProductionPlan", "200", nil)
+	add("put", "/projects/{id}/plan", "updatePlan", "ProductionPlan", "200", ref("PlanUpdate"))
+	add("post", "/projects/{id}/confirm", "confirmProduction", "Workflow", "202", ref("ConfirmProduction"))
+	add("post", "/projects/{id}/inspect", "inspectSource", "Task", "202", ref("InspectOptions"))
+	add("post", "/projects/{id}/drafts/disable-subtitles", "disableSubtitles", "", "200", object{"type": "object", "properties": object{"confirm": object{"type": "boolean", "const": true}}, "required": []string{"confirm"}})
+	add("get", "/projects/{id}/source-preview", "sourcePreviewStatus", "PreviewStatus", "200", nil)
+	add("post", "/projects/{id}/source-preview", "prepareSourcePreview", "Task", "202", object{"type": "object", "properties": object{"confirmed": object{"type": "boolean", "const": true}}, "required": []string{"confirmed"}})
 	add("delete", "/projects/{id}", "deleteProject", "", "200", object{"type": "object", "properties": object{"confirm": object{"type": "boolean", "const": true}}, "required": []string{"confirm"}})
 	add("post", "/projects/{id}/analyze", "analyze", "Task", "202", ref("AnalysisOptions"))
 	add("get", "/projects/{id}/subtitles", "getSubtitles", "Cue[]", "200", nil)
 	add("post", "/projects/{id}/drafts", "createDraft", "Draft", "201", ref("Draft"))
 	add("put", "/projects/{id}/drafts/{draftId}", "saveDraft", "Draft", "200", ref("Draft"))
-	add("post", "/projects/{id}/drafts/{draftId}/duplicate", "duplicateDraft", "Draft", "201", object{"type": "object", "properties": object{"title": object{"type": "string"}, "language": object{"type": "string"}}, "required": []string{"title", "language"}})
+	add("post", "/projects/{id}/drafts/{draftId}/duplicate", "duplicateDraft", "Draft", "201", object{"type": "object", "properties": object{"title": object{"type": "string"}}, "required": []string{"title"}})
 	add("post", "/projects/{id}/drafts/{draftId}/export", "exportDraft", "Task", "202", object{"type": "object", "properties": object{"revision": object{"type": "integer", "minimum": 1}}, "required": []string{"revision"}})
-	add("post", "/projects/{id}/rewrite", "rewriteDraft", "Draft", "200", object{"type": "object", "properties": object{"draft": ref("Draft"), "instruction": object{"type": "string"}}, "required": []string{"draft", "instruction"}})
 	add("get", "/tasks/{id}", "getTask", "Task", "200", nil)
 	add("post", "/tasks/{id}/cancel", "cancelTask", "Task", "200", nil)
 	add("post", "/tasks/{id}/retry", "retryTask", "Task", "200", nil)
@@ -135,6 +146,9 @@ func main() {
 	add("delete", "/settings/cookies", "deleteCookies", "", "200", nil)
 	for _, r := range []struct{ method, path, name, content string }{
 		{"get", "/projects/{id}/source", "source", "video/mp4"},
+		{"get", "/projects/{id}/source-preview/video", "compatibleSource", "video/mp4"},
+		{"get", "/projects/{id}/thumbnail", "projectThumbnail", "image/jpeg"},
+		{"get", "/projects/{id}/drafts/{draftId}/thumbnail", "draftThumbnail", "image/jpeg"},
 		{"get", "/projects/{id}/exports/{taskId}/video", "exportVideo", "video/mp4"},
 		{"post", "/projects/{id}/title-preview", "titlePreview", "image/png"},
 		{"get", "/tasks/{id}/events", "taskEvents", "text/event-stream"},
@@ -145,6 +159,9 @@ func main() {
 		}
 		add(r.method, r.path, r.name, "", "200", in)
 		op := paths[r.path].(object)[r.method].(object)
+		if r.name == "draftThumbnail" {
+			op["parameters"] = append(op["parameters"].([]any), object{"name": "revision", "in": "query", "required": true, "schema": object{"type": "integer", "minimum": 1}})
+		}
 		op["responses"].(object)["200"] = object{"description": "Stream", "content": object{r.content: object{"schema": object{"type": "string", "format": "binary"}}}}
 		if r.content == "video/mp4" {
 			op["responses"].(object)["206"] = object{"description": "HTTP Range partial content"}

@@ -1,0 +1,17 @@
+Adapted from upstream backend/prompt/opinion/时间点.txt.
+Locate the supplied topics in this exact subtitle chunk.
+
+Cut on argumentative boundaries. A clip must contain a complete line of
+reasoning: start where the position or question is introduced, end after the
+conclusion is drawn. A claim severed from its supporting reasoning misrepresents
+the speaker, so never cut between them.
+
+Never cut mid-argument, mid-sentence, or between a rebuttal and what it rebuts.
+Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
+descriptions of the same discussion may later be merged. Include useful opening
+and closing content. All bounds must quote cue boundaries in source seconds.
+The supplied profile overrides every duration rule written above: keep clips
+between min_seconds and max_seconds where source evidence permits. Do not add
+silence or invent content merely to satisfy a minimum. Prefer adjacent related
+discussion for short fragments. Return only a nonempty JSON array:
+[{"topic_id":"topic-1","start":0.0,"end":30.0}]

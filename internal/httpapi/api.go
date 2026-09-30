@@ -135,12 +135,21 @@ func (a *API) Handler() http.Handler {
 	a.route(mux, "GET /api/v1/projects/{id}", a.workspace)
 	a.route(mux, "DELETE /api/v1/projects/{id}", a.deleteProject)
 	a.route(mux, "POST /api/v1/projects/{id}/analyze", a.analyze)
+	a.route(mux, "GET /api/v1/projects/{id}/plan", a.getPlan)
+	a.route(mux, "PUT /api/v1/projects/{id}/plan", a.updatePlan)
+	a.route(mux, "POST /api/v1/projects/{id}/confirm", a.confirmProduction)
+	a.route(mux, "POST /api/v1/projects/{id}/inspect", a.inspect)
+	a.route(mux, "GET /api/v1/projects/{id}/thumbnail", a.thumbnail)
+	a.route(mux, "GET /api/v1/projects/{id}/drafts/{draftId}/thumbnail", a.thumbnail)
+	a.route(mux, "POST /api/v1/projects/{id}/drafts/disable-subtitles", a.disableSubtitles)
+	a.route(mux, "GET /api/v1/projects/{id}/source-preview", a.previewStatus)
+	a.route(mux, "POST /api/v1/projects/{id}/source-preview", a.startPreview)
+	a.route(mux, "GET /api/v1/projects/{id}/source-preview/video", a.previewVideo)
 	a.route(mux, "GET /api/v1/projects/{id}/source", a.source)
 	a.route(mux, "GET /api/v1/projects/{id}/subtitles", a.subtitles)
 	a.route(mux, "POST /api/v1/projects/{id}/drafts", a.createDraft)
 	a.route(mux, "PUT /api/v1/projects/{id}/drafts/{draftId}", a.saveDraft)
 	a.route(mux, "POST /api/v1/projects/{id}/drafts/{draftId}/duplicate", a.duplicate)
-	a.route(mux, "POST /api/v1/projects/{id}/rewrite", a.rewrite)
 	a.route(mux, "POST /api/v1/projects/{id}/title-preview", a.title)
 	a.route(mux, "POST /api/v1/projects/{id}/drafts/{draftId}/export", a.export)
 	a.route(mux, "GET /api/v1/projects/{id}/exports/{taskId}/video", a.video)
@@ -255,8 +264,9 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) (err error) 
 	mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if mt == "application/json" {
 		var b struct {
-			Name string `json:"name"`
-			URL  string `json:"url"`
+			Name        string `json:"name"`
+			URL         string `json:"url"`
+			Instruction string `json:"instruction"`
 		}
 		if err = body(r, &b); err != nil {
 			return err
@@ -266,6 +276,7 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) (err error) 
 		}
 		p.URL = b.URL
 		input.URL = b.URL
+		input.Instruction = b.Instruction
 		if b.Name != "" {
 			p.Name = b.Name
 		}
@@ -288,6 +299,26 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) (err error) 
 				return bad("Upload truncated or exceeds size limit")
 			}
 			switch part.FormName() {
+			case "url", "instruction":
+				b, e := io.ReadAll(io.LimitReader(part, 4097))
+				if e != nil {
+					return e
+				}
+				if len(b) > 4096 {
+					return bad("Import field exceeds size limit")
+				}
+				if part.FormName() == "url" {
+					if input.URL != "" {
+						return bad("Only one URL per project")
+					}
+					input.URL = strings.TrimSpace(string(b))
+					if e = media.ValidateSourceURL(input.URL); e != nil {
+						return bad(e.Error())
+					}
+					p.URL = input.URL
+				} else {
+					input.Instruction = string(b)
+				}
 			case "name":
 				b, e := io.ReadAll(io.LimitReader(part, 1024))
 				if e != nil {
@@ -328,8 +359,8 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) (err error) 
 				return err
 			}
 		}
-		if input.Video == "" {
-			return bad("Video file is required")
+		if (input.Video == "") == (input.URL == "") {
+			return bad("Provide exactly one video file or URL")
 		}
 	} else {
 		return bad("Use application/json or multipart/form-data")
@@ -339,6 +370,9 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) (err error) 
 	}
 	if len([]rune(p.Name)) > 200 {
 		return bad("Project name is too long")
+	}
+	if len(input.Instruction) > 4000 {
+		return bad("Instructions exceed 4000 UTF-8 bytes")
 	}
 	if _, err = a.Store.CreateProject(p, input); err != nil {
 		return err
@@ -370,6 +404,10 @@ func (a *API) workspace(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
+	p, e = a.Store.ProjectEvidence(p)
+	if e != nil {
+		return e
+	}
 	d, e := a.Store.Drafts(id)
 	if e != nil {
 		return e
@@ -386,7 +424,11 @@ func (a *API) workspace(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	return jsonResponse(w, 200, map[string]any{"project": p, "drafts": d, "tasks": t, "candidates": c, "exports": x})
+	flows, e := a.Store.Workflows(id)
+	if e != nil {
+		return e
+	}
+	return jsonResponse(w, 200, map[string]any{"project": p, "drafts": d, "tasks": t, "candidates": c, "exports": x, "workflows": flows})
 }
 func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) error {
 	var b struct {
@@ -420,7 +462,7 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 	if p.Duration <= 0 {
 		return &problem{409, "source_not_ready", "Wait for source import to complete", false}
 	}
-	o := domain.AnalysisOptions{Duration: 30, Aspect: "original", Language: "source", Goals: []string{"content"}}
+	o := domain.AnalysisOptions{Aspect: "original", Goals: []string{"content"}}
 	if e = body(r, &o); e != nil {
 		return e
 	}
@@ -433,7 +475,8 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 	if o.Mode == "visual" && !o.AllowVisual {
 		return bad("Visual analysis requires explicit permission to upload sampled images")
 	}
-	if o.Duration < 10 || o.Duration > 120 || !slices.Contains([]string{"original", "portrait", "landscape"}, o.Aspect) || !slices.Contains([]string{"source", "zh", "en", "ja"}, o.Language) || len(o.Instruction) > 4000 {
+	if (o.Duration != 0 && o.Duration < 10) || o.Duration > 120 || !slices.Contains([]string{"original", "portrait", "landscape"}, o.Aspect) || len(o.Instruction) > 4000 ||
+		(o.Category != "" && !slices.Contains(ai.Categories, o.Category)) {
 		return bad("Invalid analysis options")
 	}
 	if len(o.Goals) < 1 || len(o.Goals) > 3 {
@@ -457,11 +500,35 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	t, e := a.Store.Queue(p.ID, "analyze", o)
+	// Preserve the Task response while using the same production goal routing.
+	if e = validateProductionOptions(o); e != nil {
+		return e
+	}
+	if e = a.validateProductionModels(o); e != nil {
+		return e
+	}
+	plan, e := a.Store.Plan(p.ID)
 	if e != nil {
 		return e
 	}
-	return jsonResponse(w, 202, t)
+	plan, e = a.Store.UpdatePlan(p.ID, domain.PlanUpdate{Revision: plan.Revision, Options: o})
+	if e != nil {
+		return e
+	}
+	flow, e := a.Store.ConfirmProduction(p.ID, plan.Revision)
+	if e != nil {
+		return e
+	}
+	tasks, e := a.Store.Tasks(p.ID)
+	if e != nil {
+		return e
+	}
+	for _, t := range tasks {
+		if t.WorkflowID == flow.ID && t.Kind == "analyze" {
+			return jsonResponse(w, 202, t)
+		}
+	}
+	return errors.New("confirmed workflow has no analysis task")
 }
 func (a *API) source(w http.ResponseWriter, r *http.Request) error {
 	path, e := a.Store.Asset(r.PathValue("id"), "source")
@@ -533,8 +600,7 @@ func (a *API) saveDraft(w http.ResponseWriter, r *http.Request) error {
 }
 func (a *API) duplicate(w http.ResponseWriter, r *http.Request) error {
 	var b struct {
-		Title    string `json:"title"`
-		Language string `json:"language"`
+		Title string `json:"title"`
 	}
 	if e := body(r, &b); e != nil {
 		return e
@@ -550,7 +616,6 @@ func (a *API) duplicate(w http.ResponseWriter, r *http.Request) error {
 	d.ID = domain.ID()
 	d.Revision = 1
 	d.Title = b.Title
-	d.Language = b.Language
 	p, e := a.Store.Project(id)
 	if e != nil {
 		return e
@@ -563,36 +628,6 @@ func (a *API) duplicate(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	return jsonResponse(w, 201, d)
-}
-func (a *API) rewrite(w http.ResponseWriter, r *http.Request) error {
-	var b struct {
-		Draft       domain.Draft `json:"draft"`
-		Instruction string       `json:"instruction"`
-	}
-	if e := body(r, &b); e != nil {
-		return e
-	}
-	p, e := a.Store.Project(r.PathValue("id"))
-	if e != nil {
-		return e
-	}
-	if e = b.Draft.Validate(p.Duration); e != nil {
-		return bad(e.Error())
-	}
-	if len(strings.TrimSpace(b.Instruction)) == 0 || len(b.Instruction) > 4000 {
-		return bad("Instruction must be 1–4000 bytes")
-	}
-	m, e := a.Store.Model("text")
-	if e != nil {
-		return e
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
-	d, e := ai.Rewrite(ctx, ai.New(m), b.Draft, b.Instruction)
-	if e != nil {
-		return e
-	}
-	return jsonResponse(w, 200, d)
 }
 func (a *API) title(w http.ResponseWriter, r *http.Request) error {
 	var d domain.Draft

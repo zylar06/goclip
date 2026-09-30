@@ -22,14 +22,33 @@ type Worker struct {
 	MaxDuration float64
 	MaxBytes    int64
 	TaskTimeout time.Duration
+	// HealthBeat is invoked only by the OS-lock owner, never a standby worker.
+	HealthBeat func() error
 	// Execute is a test seam. Production uses execute.
 	Execute func(context.Context, domain.Task, domain.ProgressFunc) error
 }
 
 func (w *Worker) Run(ctx context.Context) error {
+	lock, err := acquireWorkerLock(ctx, w.Store.Dir)
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := lock.Close(); err != nil {
+			slog.Error("worker execution lock close failed", "error", err)
+		}
+	}()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
+		if w.HealthBeat != nil {
+			if err := w.HealthBeat(); err != nil {
+				return err
+			}
+		}
 		n, err := w.Store.Recover(time.Now().Add(-90 * time.Second))
 		if err != nil {
 			return err
@@ -55,6 +74,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 func (w *Worker) runTask(parent context.Context, t domain.Task) error {
+	scoped := *w
+	scoped.Store = w.Store.ForTask(t)
+	w = &scoped
 	timeout := w.TaskTimeout
 	if timeout == 0 {
 		timeout = 6 * time.Hour
@@ -63,6 +85,7 @@ func (w *Worker) runTask(parent context.Context, t domain.Task) error {
 	defer cancel()
 	stopped := make(chan struct{})
 	monitorDone := make(chan struct{})
+	healthErr := make(chan error, 1)
 	go func() {
 		defer close(monitorDone)
 		tick := time.NewTicker(time.Second)
@@ -74,6 +97,13 @@ func (w *Worker) runTask(parent context.Context, t domain.Task) error {
 			case <-ctx.Done():
 				return
 			case <-tick.C:
+				if w.HealthBeat != nil {
+					if err := w.HealthBeat(); err != nil {
+						healthErr <- err
+						cancel()
+						return
+					}
+				}
 				if err := w.Store.Heartbeat(t.ID); err != nil {
 					if !errors.Is(err, store.ErrConflict) {
 						slog.Error("task heartbeat failed", "task", t.ID, "error", err)
@@ -93,12 +123,18 @@ func (w *Worker) runTask(parent context.Context, t domain.Task) error {
 	err := exec(ctx, t, progress)
 	close(stopped)
 	<-monitorDone
+	var healthFailure error
+	select {
+	case healthFailure = <-healthErr:
+		err = healthFailure
+	default:
+	}
 	current, loadErr := w.Store.Task(t.ID)
 	if loadErr != nil {
 		return loadErr
 	}
-	if current.Status != "running" {
-		return nil
+	if current.Status != "running" || current.LeaseID != t.LeaseID {
+		return healthFailure
 	}
 	status, message, retryable := "completed", "", false
 	if current.CancelRequested {
@@ -113,6 +149,13 @@ func (w *Worker) runTask(parent context.Context, t domain.Task) error {
 		status = "failed"
 		message = err.Error()
 		retryable = true
+		var modelError *ai.Error
+		if errors.As(err, &modelError) {
+			retryable = modelError.Retryable
+		}
+		if errors.Is(err, store.ErrLegacyCandidateOwnership) {
+			retryable = false
+		}
 	}
 	if status != "completed" {
 		slog.Warn("task stopped", "task", t.ID, "status", status, "error", message)
@@ -125,29 +168,8 @@ func (w *Worker) runTask(parent context.Context, t domain.Task) error {
 		return e
 	}
 	status, message = finished.Status, finished.Error
-	p, e := w.Store.Project(t.ProjectID)
-	if e != nil {
-		return e
-	}
-	if status == "completed" {
-		p.Error = ""
-		switch t.Kind {
-		case "import":
-			p.Status = "source_ready"
-		case "analyze":
-			p.Status = "drafts_ready"
-		case "export":
-			p.Status = "exported"
-		}
-	} else {
-		p.Error = message
-		p.Status = status
-	}
-	if e = w.Store.UpdateProject(p); e != nil {
-		return e
-	}
 	slog.Info("task finished", "task", t.ID, "status", status)
-	return nil
+	return healthFailure
 }
 func (w *Worker) execute(ctx context.Context, t domain.Task, progress domain.ProgressFunc) error {
 	dir, err := w.Store.ProjectDir(t.ProjectID)
@@ -161,6 +183,10 @@ func (w *Worker) execute(ctx context.Context, t domain.Task, progress domain.Pro
 		return w.analyze(ctx, t, dir, progress)
 	case "export":
 		return w.export(ctx, t, dir, progress)
+	case "inspect":
+		return w.inspectSource(ctx, t, dir, progress)
+	case "preview":
+		return w.preparePreview(ctx, t, dir, progress)
 	default:
 		return fmt.Errorf("unsupported task kind %q", t.Kind)
 	}
@@ -188,6 +214,18 @@ func (w *Worker) importSource(ctx context.Context, t domain.Task, dir string, pr
 		return err
 	}
 	source, err := w.Store.Asset(t.ProjectID, "source")
+	if errors.Is(err, store.ErrNotFound) && input.URL != "" {
+		checkpoint, e := readDownloadCheckpoint(dir, t.ID, input)
+		if e == nil {
+			source = filepath.Join(dir, checkpoint.Video)
+			if input.Subtitle == "" {
+				input.Subtitle = checkpoint.Subtitle
+			}
+			err = nil
+		} else if !errors.Is(e, os.ErrNotExist) {
+			return e
+		}
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		if input.URL != "" {
 			cookieFile := ""
@@ -214,20 +252,25 @@ func (w *Worker) importSource(ctx context.Context, t domain.Task, dir string, pr
 					return e
 				}
 			}
-			video, subtitle, e := w.Media.Download(ctx, input.URL, dir, cookieFile, progress)
+			video, subtitle, e := w.Media.DownloadWithSubtitles(ctx, input.URL, dir, cookieFile, input.Subtitle == "", progress)
 			if e != nil {
 				return e
 			}
 			source = video
-			if subtitle != "" {
+			if subtitle != "" && input.Subtitle == "" {
 				rel, e := filepath.Rel(dir, subtitle)
 				if e != nil || !filepath.IsLocal(rel) {
 					return errors.New("download subtitle outside project")
 				}
 				input.Subtitle = rel
-				if e = w.Store.SetAsset(t.ProjectID, "source_srt", rel); e != nil {
-					return e
-				}
+			}
+			videoRel, e := filepath.Rel(dir, source)
+			if e != nil || !filepath.IsLocal(videoRel) {
+				return errors.New("download video outside project")
+			}
+			checkpoint := downloadCheckpoint{TaskID: t.ID, URL: input.URL, Video: videoRel, Subtitle: input.Subtitle}
+			if e = atomicJSON(downloadCheckpointPath(dir, t.ID), checkpoint); e != nil {
+				return e
 			}
 		} else {
 			if !filepath.IsLocal(input.Video) {
@@ -280,15 +323,10 @@ func (w *Worker) importSource(ctx context.Context, t domain.Task, dir string, pr
 	p.Duration = info.Duration
 	p.Width = info.Width
 	p.Height = info.Height
-	if err = w.Store.UpdateProject(p); err != nil {
-		return err
-	}
+	p.HasAudio = &info.HasAudio
 	rel, err := filepath.Rel(dir, source)
 	if err != nil || !filepath.IsLocal(rel) {
 		return errors.New("source outside project directory")
-	}
-	if err = w.Store.SetAsset(t.ProjectID, "source", rel); err != nil {
-		return err
 	}
 	cues := []domain.Cue{}
 	// Reuse completed ASR checkpoint only when it is valid JSON; never skip malformed checkpoints.
@@ -312,11 +350,6 @@ func (w *Worker) importSource(ctx context.Context, t domain.Task, dir string, pr
 			if e != nil {
 				return e
 			}
-		} else if info.HasAudio {
-			cues, err = w.Media.Transcribe(ctx, source, dir, progress)
-			if err != nil {
-				return err
-			}
 		}
 		if err = atomicJSON(cuePath, cues); err != nil {
 			return err
@@ -330,20 +363,26 @@ func (w *Worker) importSource(ctx context.Context, t domain.Task, dir string, pr
 	if err = progress("subtitles", nil); err != nil {
 		return err
 	}
-	return w.Store.SetAsset(t.ProjectID, "subtitles", "subtitles.json")
+	p.SubtitleStatus = "missing"
+	p.SubtitleSource = ""
+	if len(cues) > 0 {
+		p.SubtitleStatus = "available"
+		p.SubtitleSource = "uploaded"
+		if input.URL != "" && input.Subtitle != "uploaded.srt" {
+			p.SubtitleSource = "platform"
+		}
+	}
+	plan := domain.LocalPlan(p, 1)
+	plan.Options.Instruction = input.Instruction
+	p.Plan = &plan
+	return w.Store.CompleteImport(t.ID, p, rel, "subtitles.json")
 }
 func (w *Worker) readCues(pid string) ([]domain.Cue, error) {
 	path, err := w.Store.Asset(pid, "subtitles")
 	if err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var cues []domain.Cue
-	err = json.Unmarshal(b, &cues)
-	return cues, err
+	return readCueFile(path)
 }
 
 // LLM completion weights are not duration/progress measurements. Keep their
@@ -352,6 +391,9 @@ func analysisProgress(progress domain.ProgressFunc) domain.ProgressFunc {
 	return func(stage string, _ *float64) error { return progress(stage, nil) }
 }
 func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progress domain.ProgressFunc) error {
+	if t.WorkflowID != "" {
+		return w.produce(ctx, t, dir, progress)
+	}
 	var o domain.AnalysisOptions
 	if err := json.Unmarshal(t.Payload, &o); err != nil {
 		return err
@@ -386,13 +428,16 @@ func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progres
 		if e != nil {
 			return e
 		}
-		drafts, candidates, err = ai.AnalyzeVisual(ctx, ai.New(m), frames, p.Duration, o, cp, analysisProgress(progress))
+		drafts, candidates, err = ai.AnalyzeVisualWithSampler(ctx, ai.New(m), frames, p.Duration, o, cp, analysisProgress(progress),
+			func(ctx context.Context, times []float64) ([]domain.Frame, error) {
+				return w.Media.SampleAt(ctx, source, cp, times, progress)
+			})
 	} else if o.Mode == "subtitle" {
 		m, e := w.Store.Model("text")
 		if e != nil {
 			return e
 		}
-		cues, e := w.readCues(t.ProjectID)
+		cues, e := w.ensureTranscript(ctx, t.ProjectID, dir, progress)
 		if e != nil {
 			return e
 		}
@@ -412,7 +457,7 @@ func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progres
 	if err = progress("drafts", nil); err != nil {
 		return err
 	}
-	return w.Store.SaveAnalysis(t.ID, t.ProjectID, drafts, candidates)
+	return w.Store.CompleteAnalysis(t.ID, t.ProjectID, drafts, candidates)
 }
 func (w *Worker) export(ctx context.Context, t domain.Task, dir string, progress domain.ProgressFunc) error {
 	var input domain.ExportPayload
@@ -435,7 +480,7 @@ func (w *Worker) export(ctx context.Context, t domain.Task, dir string, progress
 		if _, err = w.Media.Probe(ctx, output); err != nil {
 			return fmt.Errorf("existing export checkpoint invalid: %w", err)
 		}
-		return w.Store.SaveExport(t.ID, t.ProjectID, input.Draft)
+		return w.Store.CompleteExport(t.ID, t.ProjectID, input.Draft)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -443,43 +488,19 @@ func (w *Worker) export(ctx context.Context, t domain.Task, dir string, progress
 	if err != nil {
 		return err
 	}
-	cues, err := w.readCues(t.ProjectID)
-	if err != nil {
-		return err
+	var cues []domain.Cue
+	if input.Draft.Subtitles {
+		cues, err = w.ensureTranscript(ctx, t.ProjectID, dir, progress)
+		if err != nil {
+			return err
+		}
+		if len(cues) == 0 {
+			return errors.New("No subtitles are available; disable added subtitles or provide an SRT")
+		}
 	}
 	renderDraft := input.Draft
-	if renderDraft.Language != "source" {
-		translation := filepath.Join(out, "translation.json")
-		var saved struct {
-			Draft domain.Draft `json:"draft"`
-			Cues  []domain.Cue `json:"cues"`
-		}
-		if b, e := os.ReadFile(translation); e == nil {
-			if e = json.Unmarshal(b, &saved); e != nil {
-				return fmt.Errorf("translation checkpoint: %w", e)
-			}
-		} else if !errors.Is(e, os.ErrNotExist) {
-			return e
-		} else {
-			if err = progress("translation", nil); err != nil {
-				return err
-			}
-			m, e := w.Store.Model("text")
-			if e != nil {
-				return e
-			}
-			saved.Draft, saved.Cues, e = ai.Translate(ctx, ai.New(m), renderDraft, cues)
-			if e != nil {
-				return e
-			}
-			if e = atomicJSON(translation, saved); e != nil {
-				return e
-			}
-		}
-		renderDraft, cues = saved.Draft, saved.Cues
-	}
 	if _, err = w.Media.Render(ctx, source, out, output, renderDraft, cues, progress); err != nil {
 		return err
 	}
-	return w.Store.SaveExport(t.ID, t.ProjectID, input.Draft)
+	return w.Store.CompleteExport(t.ID, t.ProjectID, input.Draft)
 }

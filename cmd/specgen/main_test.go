@@ -55,4 +55,26 @@ func TestGeneratedDocumentContainsActualPublicOperations(t *testing.T) {
 	if duplicate["201"] == nil {
 		t.Fatal("duplicate response must match API's 201 Created")
 	}
+	create := paths["/projects"].(map[string]any)["post"].(map[string]any)["requestBody"].(map[string]any)["content"].(map[string]any)
+	for _, contentType := range []string{"application/json", "multipart/form-data"} {
+		s := create[contentType].(map[string]any)["schema"].(map[string]any)
+		props := s["properties"].(map[string]any)
+		if props["url"] == nil || props["instruction"] == nil {
+			t.Fatal("URL and instructions missing from upload contract", contentType)
+		}
+		if contentType == "multipart/form-data" && len(s["oneOf"].([]any)) != 2 {
+			t.Fatal("upload must choose exactly one URL or video")
+		}
+	}
+	thumb := paths["/projects/{id}/drafts/{draftId}/thumbnail"].(map[string]any)["get"].(map[string]any)
+	found := false
+	for _, p := range thumb["parameters"].([]any) {
+		param := p.(map[string]any)
+		if param["name"] == "revision" && param["in"] == "query" && param["required"] == true {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("draft thumbnails require revision")
+	}
 }

@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,5 +214,24 @@ func TestRenderPublicationAndFailureCleanup(t *testing.T) {
 	}
 	if _, err := outputPath(out, "../escape.mp4"); err == nil {
 		t.Fatal("output traversal accepted")
+	}
+}
+
+// Sampled timestamps are transmitted to vision models at three decimals, so a
+// sample time carrying more precision than that cannot be matched back to its
+// own frame when the model echoes it. Sampling must not emit such values.
+func TestSampleTimesAreMillisecondExact(t *testing.T) {
+	tools, source, dir := fakeTools(t, "uneven-duration")
+	frames, err := tools.Sample(context.Background(), source, dir, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) < 2 {
+		t.Fatalf("expected several samples over a 299.84s source, got %d", len(frames))
+	}
+	for _, f := range frames {
+		if rounded := math.Round(f.Time*1000) / 1000; f.Time != rounded {
+			t.Fatalf("sample time %v is not exact at three decimals (would be sent as %v)", f.Time, rounded)
+		}
 	}
 }
