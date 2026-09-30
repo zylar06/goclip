@@ -1,17 +1,2 @@
-Adapted from upstream backend/prompt/content_review/时间点.txt.
-Locate the supplied topics in this exact subtitle chunk.
-
-Cut on narrative boundaries. A clip must contain a coherent beat of the account
-plus the commentary attached to it: start where the beat begins, end after the
-commentator's point about it is made. A recap severed from its analysis, or a
-verdict severed from its reasoning, is unusable.
-
-Never cut mid-sentence or partway through a plot beat.
-Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
-descriptions of the same discussion may later be merged. Include useful opening
-and closing content. All bounds must quote cue boundaries in source seconds.
-The supplied profile overrides every duration rule written above: keep clips
-between min_seconds and max_seconds where source evidence permits. Do not add
-silence or invent content merely to satisfy a minimum. Prefer adjacent related
-discussion for short fragments. Return only a nonempty JSON array:
-[{"topic_id":"topic-1","start":0.0,"end":30.0}]
+在本字幕片段定位主题，按叙事边界切分：从叙事段落开始，到评论观点落下后结束。复盘不能与分析分开，结论不能与理由分开；不得在句中或叙事节拍中间切断。
+每个 topic_id 最多一次，边界必须是输入 cue 的源秒数。profile 时长优先；不得为凑时长加入沉默或无关内容，短片段可补相邻相关话。只返回非空 JSON 数组：[{"topic_id":"topic-1","start":0.0,"end":30.0}]。

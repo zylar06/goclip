@@ -1,9 +1,5 @@
-Adapted from upstream backend/prompt/标题生成.txt and pipeline/step4_title.py.
-Write one concise, engaging but faithful title for each selected candidate.
-Use the subtitle excerpt or visible evidence to identify the central point.
-No invented outcomes, unsupported claims, exaggerated clickbait or outside facts.
-For promo goals a short question/challenge/hook is welcome only if evidence
-supports it. Respect options.language (source means the source material language).
-Return exactly one object per supplied candidate ID:
-[{"id":"text-1","title":"at most 200 characters","hook":"at most 120 characters, may be empty"}]
-Never change IDs or scene bounds.
+为每个入选候选片段写一个简短、有吸引力但忠实于证据的标题。标题应具体，点明真实矛盾、结论、数字或收益，不写泛泛的“聊聊……”。hook 应尽可能逐字引用片段实际开场，用于校验开头；没有合适原话时可为空。
+不得编造结果、承诺、外部事实或夸张标题党。promo 可以采用问题、挑战或反差式表达，但必须由字幕或可见证据支持。遵守 options.language；source 表示使用源素材语言。
+每个给定 candidate ID 恰好返回一个对象：
+[{"id":"text-1","title":"不超过200字","hook":"不超过120字，可为空"}]
+不得修改 ID 或场景边界。

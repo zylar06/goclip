@@ -29,7 +29,7 @@ func readyProductionAPI(t *testing.T) (*API, string) {
 	return a, p.ID
 }
 
-func TestPlanRequiresExplicitConfirmationAndPreservesSubtitleDefault(t *testing.T) {
+func TestPlanRequiresExplicitConfirmationAndPreservesSafeSmartDefault(t *testing.T) {
 	a, pid := readyProductionAPI(t)
 	h := a.Handler()
 	path := "/api/v1/projects/" + pid
@@ -41,7 +41,7 @@ func TestPlanRequiresExplicitConfirmationAndPreservesSubtitleDefault(t *testing.
 	if err := json.Unmarshal(got.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if plan.Options.BurnSubtitles || plan.Options.Confirmed || plan.Options.Duration != 0 {
+	if plan.Options.Mode != "auto" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Confirmed || plan.Options.Duration != 0 {
 		t.Fatal(plan)
 	}
 	tasks, _ := a.Store.Tasks(pid)

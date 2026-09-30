@@ -168,7 +168,12 @@ func (t *Tools) downloadArgsWithSubtitles(raw, cookies string, includeSubtitles 
 	args := []string{
 		"--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-overwrites",
 		"--no-cache-dir", "--no-colors", "--newline", "--progress",
-		"--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
+		// Bilibili CDN streams can close a connection after a small partial read.
+		// Match AutoClip's bounded recovery policy, while keeping one fragment at
+		// a time so retries resume predictably instead of multiplying connections.
+		"--socket-timeout", "60", "--retries", "10", "--fragment-retries", "10",
+		"--extractor-retries", "3", "--retry-sleep", "exp=1:20",
+		"--continue", "--concurrent-fragments", "1",
 		"--max-filesize", strconv.FormatInt(t.cfg.MaxBytes, 10),
 		// yt-dlp 2026.08.19 rejects the documented `duration?<=N` optional-field
 		// form outright ("Invalid filter part"), in every spacing and grouping
@@ -200,6 +205,22 @@ func (t *Tools) downloadArgsWithSubtitles(raw, cookies string, includeSubtitles 
 	return append(args, "--", raw)
 }
 
+// actionableDownloadError translates the one Bilibili response users most
+// commonly see when an unauthenticated server request is challenged.  It does
+// not attempt to evade the platform check: a Docker container cannot and must
+// not read the host browser's cookie store.  Instead, tell the user to provide
+// their own exported Netscape cookie file through Settings, which is the
+// server-side equivalent of AutoClip desktop's cookies-from-browser option.
+func actionableDownloadError(raw, cookies string, err error) error {
+	if !strings.Contains(raw, "bilibili.com/") || !strings.Contains(strings.ToLower(err.Error()), "http error 412") {
+		return err
+	}
+	if cookies == "" {
+		return fmt.Errorf("Bilibili 拒绝了未登录的下载请求（HTTP 412）。请在浏览器登录 Bilibili 后，将自己的 Netscape 格式 cookies.txt 上传到“设置 → 导入 Cookie”，再重试任务: %w", err)
+	}
+	return fmt.Errorf("Bilibili 拒绝了此下载请求（HTTP 412）。已配置的 Cookie 可能过期；请在浏览器重新登录后导出新的 Netscape 格式 cookies.txt，上传到“设置 → 导入 Cookie”，再重试任务: %w", err)
+}
+
 // Download creates a unique subdirectory under directory, retained on success.
 // cookies is a path to a Netscape cookie file, not cookie contents. A private copy
 // prevents yt-dlp's cookie-jar writeback from modifying the caller's file.
@@ -225,7 +246,7 @@ func (t *Tools) DownloadWithSubtitles(ctx context.Context, raw, directory, cooki
 		}
 	}
 	if err != nil {
-		return "", "", err
+		return "", "", actionableDownloadError(raw, cookies, err)
 	}
 	if err = report(progress, "download", nil); err != nil {
 		return "", "", err

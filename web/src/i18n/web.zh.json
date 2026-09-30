@@ -198,5 +198,11 @@
   "This browser cannot play the source. Timing edits and export remain available; try a browser-compatible MP4 source.": "当前浏览器无法播放此素材。仍可调整时间和导出；建议使用浏览器兼容的 MP4 素材。",
   "Export an immutable snapshot of this revision.": "导出该版本的固定快照。",
   "No projects yet": "暂无项目",
-  "Optional Netscape cookies.txt for restricted Bilibili / YouTube imports. Cookies are sensitive and shared by all server users; never upload someone else’s credentials.": "可选的 Netscape cookies.txt，用于受限的 Bilibili / YouTube 导入。Cookie 属于敏感信息，服务器上所有用户共享；请勿上传他人的凭据。"
+  "Optional Netscape cookies.txt for restricted Bilibili / YouTube imports. Cookies are sensitive and shared by all server users; never upload someone else’s credentials.": "可选的 Netscape cookies.txt，用于受限的 Bilibili / YouTube 导入。Cookie 属于敏感信息，服务器上所有用户共享；请勿上传他人的凭据。",
+  "Smart (subtitles first)": "智能（优先字幕）",
+  "Model capability": "模型能力",
+  "Text only": "仅文本",
+  "Multimodal / image input": "多模态 / 可输入图片",
+  "I allow four sampled images to be uploaded for an AI route recommendation. This does not start production.": "我同意上传 4 张抽样画面，用于 AI 推荐分析路线；这不会开始正式制作。",
+  "Recommend route from sampled images": "根据抽样画面推荐路线"
 }

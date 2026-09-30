@@ -1,20 +1,2 @@
-Adapted from upstream backend/prompt/knowledge/时间点.txt.
-Locate the supplied topics in this exact subtitle chunk.
-
-Cut on semantic boundaries, not clock time. Good starts open a thought: a cue
-that introduces, defines, contrasts or asks. Good ends close one: a cue that
-concludes, summarizes, or resolves the question just raised. Never cut
-mid-sentence, mid-derivation or mid-inference, and never absorb the transition
-into the next topic.
-
-For explanatory material, start on the statement of the problem or claim rather
-than on filler that precedes it, and end after the conclusion is actually
-reached — a derivation cut before its result is unusable.
-Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
-descriptions of the same discussion may later be merged. Include useful opening
-and closing content. All bounds must quote cue boundaries in source seconds.
-The supplied profile overrides every duration rule written above: keep clips
-between min_seconds and max_seconds where source evidence permits. Do not add
-silence or invent content merely to satisfy a minimum. Prefer adjacent related
-discussion for short fragments. Return only a nonempty JSON array:
-[{"topic_id":"topic-1","start":0.0,"end":30.0}]
+在本字幕片段定位主题，按语义而非钟表时间切分。好开头是引入、定义、对比或提问；好结尾是结论、总结或解决刚提出的问题。不得在句子、推导或推理中间切断，也不要吞入下一主题的过渡。
+讲解内容从问题或主张开始，不从前面的废话开始；必须在真正得出结论后结束，未到结果的推导不可用。每个 topic_id 最多一次，边界必须是输入 cue 的源秒数。profile 时长优先；不要凑时长。只返回非空 JSON 数组：[{"topic_id":"topic-1","start":0.0,"end":30.0}]。

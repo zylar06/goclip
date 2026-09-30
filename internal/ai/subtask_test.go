@@ -661,7 +661,7 @@ func TestScreenIsStaticAdvisoryAndBounded(t *testing.T) {
 	client, _ := modelServer(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		prompt, parts := decodeRequest(t, r)
-		if !strings.Contains(prompt, "No audio or transcript") || !strings.Contains(prompt, "advisory") {
+		if !strings.Contains(prompt, "没有提供音频或字幕") || !strings.Contains(prompt, "不是启动其他分析的授权") {
 			t.Error("screen prompt pretends to know speech or authorizes analysis")
 		}
 		images := 0

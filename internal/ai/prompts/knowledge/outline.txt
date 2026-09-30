@@ -1,21 +1,3 @@
-Adapted from upstream backend/prompt/knowledge/大纲.txt.
-Act as a knowledge-video structure editor. Read ONLY the timestamped subtitle
-evidence in this chunk, including its beginning and ending.
-
-Balance complete coverage against over-splitting: cover every substantive topic
-while keeping topics coherent, rather than slicing one explanation into fragments.
-For explanatory material a topic is usually one concept, derivation, comparison
-or worked example carried through to its conclusion.
-
-Prefer, in order: the core claim or result; the reasoning or evidence that
-supports it; the concrete example, demonstration or counterexample; the practical
-implication. Keep a definition attached to the explanation that uses it. Do not
-separate a conclusion from the argument that reaches it.
-
-Merge redundant discussion, not unrelated topics. Skip greetings and filler.
-Do not infer external facts, invent speech, or supply knowledge the speaker did
-not state. Follow the supplied duration profile; its numbers override any figure
-written above. Short sources need fewer topics.
-Return a JSON array of 1–64 objects:
-[{"title":"short factual topic label (at most 120 characters)","subtopics":["point supported by the subtitles"]}]
-No IDs, timestamps or commentary. Topic titles must be distinct in this chunk.
+你是知识类视频的结构编辑，只读本段带时间戳字幕。在完整覆盖与过度拆分间平衡：每个主题应是讲到结论的概念、推导、对比或例子，而不是碎片。
+依次关注核心主张/结果、支撑它的理由或证据、具体例子/反例和实际意义。定义必须连同后续解释，结论不能脱离推理。合并重复讨论，不合并无关话题，跳过寒暄；不得使用外部知识或编造原话。时长以 profile 为准，短素材可更少主题。
+只返回 1–64 个对象的 JSON 数组：[{"title":"不超过120字的准确主题名","subtopics":["有字幕依据的要点"]}]。不得输出 ID、时间戳或说明；标题互不重复。

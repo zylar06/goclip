@@ -1,12 +1,5 @@
-Adapted from upstream backend/prompt/时间点.txt and pipeline/step2_timeline.py.
-Locate the supplied topics in this exact subtitle chunk. Start on the first core
-sentence, finish after the last relevant sentence, preserve a complete thought,
-and exclude unrelated lead-in/outro. Never blindly set all ends to the chunk end.
-Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
-descriptions of the same discussion may later be merged. Include useful opening
-and closing content. All bounds must quote cue boundaries in source seconds.
-The supplied profile overrides every podcast-specific duration rule: keep clips
-between min_seconds and max_seconds where source evidence permits. Do not add
-silence or invent content merely to satisfy a minimum. Prefer adjacent related
-discussion for short fragments. Return only a nonempty JSON array:
+在给定字幕片段中定位每个主题。片段开头必须是完整思想的首句，优先选择能制造问题、反差、具体结论或直接切入重点的原话；不要以“所以”“嗯”“然后”等无上下文的承接词开头。
+结尾必须落在完整思想的最后一句，并保留结论、回报、限定条件或关键例子。陌生观众不看前文也应理解片段；不能只留下结论、笑点或数字而丢掉其前提。不要为了凑时长加入沉默、无关铺垫或下一主题，也不要把所有结尾机械设为分段末尾。
+每个提供的 topic_id 最多使用一次。所有边界必须精确引用输入字幕 cue 的源秒数。profile 的 min_seconds 和 max_seconds 优先；证据不足时不要编造内容，短片段可优先补入相邻且相关的话。
+只返回非空 JSON 数组：
 [{"topic_id":"topic-1","start":0.0,"end":30.0}]

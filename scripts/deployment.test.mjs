@@ -22,7 +22,7 @@ test('one shared image, local durable volumes and separate web/worker commands',
   assert.equal(web.image,worker.image)
   assert.deepEqual(web.command,['web']);assert.deepEqual(worker.command,['worker'])
   for(const service of [web,worker]){
-    assert.equal(service.platform,'linux/amd64')
+    assert.equal(service.platform,undefined,'let Docker select the native amd64 or arm64 image')
     assert(service.volumes.some(v=>v.type==='volume'&&v.source==='data'&&v.target==='/data'))
     assert(service.volumes.some(v=>v.type==='volume'&&v.source==='models'&&v.target==='/models'))
     assert.equal(service.read_only,true);assert(service.cap_drop.includes('ALL'))
@@ -44,8 +44,10 @@ test('Dockerfile consumes the verified image/tool/model lock',()=>{
     assert(dockerfile.includes(`${image}@${digest}`),`unused pinned image ${image}`)
   }
   for(const name of ['whisper_cpp','whisper_model','yt_dlp','deno']){
-    assert.match(lock[name].sha256,/^[a-f0-9]{64}$/)
-    assert(dockerfile.includes(lock[name].sha256),`unused checksum ${name}`)
+    for(const [field, checksum] of Object.entries(lock[name]).filter(([field])=>field.endsWith('sha256'))){
+      assert.match(checksum,/^[a-f0-9]{64}$/)
+      assert(dockerfile.includes(checksum),`unused checksum ${name}.${field}`)
+    }
   }
   assert(dockerfile.includes('COPY api/ ./api/'),'frontend contract must be available at build time')
   assert(dockerfile.includes('USER 10001:10001'),'runtime is not root')
@@ -65,12 +67,16 @@ test('APT, npm and Go downloads are cached without disabling build-time tests',(
   assert(dockerfile.includes('COPY --from=go-base /etc/ssl/certs/ca-certificates.crt'))
   assert(dockerfile.includes('FROM apt-base AS native'))
   assert(dockerfile.includes('FROM apt-base AS runtime'))
-  for(const id of ['autoclip-apt-native-amd64','autoclip-apt-runtime-amd64']){
+  for(const id of ['autoclip-apt-native-${TARGETARCH}','autoclip-apt-engine-${TARGETARCH}','autoclip-apt-runtime-${TARGETARCH}']){
     assert(dockerfile.includes(`id=${id},target=/var/cache/apt,sharing=locked`))
   }
   for(const target of ['/root/.npm','/go/pkg/mod','/root/.cache/go-build']){
     assert(dockerfile.includes(`target=${target}`),`missing dependency cache ${target}`)
   }
+  assert(dockerfile.includes('COPY engine/requirements.txt ./requirements.txt'))
+  assert(dockerfile.includes('AUTOCLIP_ENGINE_PYTHON=/opt/goclip-engine/bin/python'))
+  const engineRequirements=fs.readFileSync('engine/requirements.txt','utf8')
+  assert.match(engineRequirements,/autoclip @ git\+https:\/\/github\.com\/artbyjazi\/autoclip\.git@5d0eac36fa615b79dd2104083bf273a96f8d68bb/)
   assert(dockerfile.includes('npm run typecheck && npm test && npm run build'))
   assert(dockerfile.includes('go test -timeout 180s ./...'))
 })

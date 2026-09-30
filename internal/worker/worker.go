@@ -12,6 +12,7 @@ import (
 
 	"autoclip-go/internal/ai"
 	"autoclip-go/internal/domain"
+	"autoclip-go/internal/engine"
 	"autoclip-go/internal/media"
 	"autoclip-go/internal/store"
 )
@@ -22,6 +23,10 @@ type Worker struct {
 	MaxDuration float64
 	MaxBytes    int64
 	TaskTimeout time.Duration
+	// Engine is the optional Python AutoClip media engine. Go retains task
+	// ownership and durable state; a nil engine preserves the legacy path while
+	// the migration is rolled out incrementally.
+	Engine *engine.Runner
 	// HealthBeat is invoked only by the OS-lock owner, never a standby worker.
 	HealthBeat func() error
 	// Execute is a test seam. Production uses execute.
@@ -401,6 +406,9 @@ func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progres
 	if !o.Confirmed {
 		return errors.New("analysis not confirmed")
 	}
+	if w.Engine != nil && (o.Mode == "subtitle" || (o.Mode == "auto" && !o.AllowVisual)) {
+		return w.analyzeWithEngine(ctx, t, dir, o, progress)
+	}
 	cp := filepath.Join(dir, "analysis", t.ID)
 	if err := os.MkdirAll(cp, 0700); err != nil {
 		return err
@@ -408,7 +416,7 @@ func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progres
 	var drafts []domain.Draft
 	var candidates []domain.Candidate
 	var err error
-	if o.Mode == "visual" {
+	if o.Mode == "visual" || (o.Mode == "auto" && o.AllowVisual) {
 		if !o.AllowVisual {
 			return errors.New("image transmission not permitted")
 		}
@@ -432,7 +440,10 @@ func (w *Worker) analyze(ctx context.Context, t domain.Task, dir string, progres
 			func(ctx context.Context, times []float64) ([]domain.Frame, error) {
 				return w.Media.SampleAt(ctx, source, cp, times, progress)
 			})
-	} else if o.Mode == "subtitle" {
+		if err == nil {
+			err = w.attachVisualReframes(ctx, dir, source, drafts, o.Aspect, progress)
+		}
+	} else if o.Mode == "subtitle" || o.Mode == "auto" {
 		m, e := w.Store.Model("text")
 		if e != nil {
 			return e
@@ -487,6 +498,12 @@ func (w *Worker) export(ctx context.Context, t domain.Task, dir string, progress
 	source, err := w.Store.Asset(t.ProjectID, "source")
 	if err != nil {
 		return err
+	}
+	if input.Draft.Origin == "python-engine" && w.Engine != nil {
+		if err = w.exportWithEngine(ctx, t, dir, source, output, input.Draft, progress); err != nil {
+			return err
+		}
+		return w.Store.CompleteExport(t.ID, t.ProjectID, input.Draft)
 	}
 	var cues []domain.Cue
 	if input.Draft.Subtitles {

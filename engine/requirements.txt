@@ -1,0 +1,4 @@
+# AutoClip media engine, pinned to the reviewed upstream revision.  The Go
+# service is the source of truth for jobs and data; this package is used only
+# for its local media pipeline and OpenAI-compatible highlight provider.
+autoclip @ git+https://github.com/artbyjazi/autoclip.git@5d0eac36fa615b79dd2104083bf273a96f8d68bb

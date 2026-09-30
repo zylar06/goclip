@@ -9,7 +9,7 @@ func TestAnalysisAndSubtitleRenderingAreIndependent(t *testing.T) {
 	}
 	p := Project{SubtitleStatus: "available"}
 	plan := LocalPlan(p, 1)
-	if plan.Options.BurnSubtitles || plan.Options.Duration != 0 || plan.Options.Confirmed {
+	if plan.Options.Mode != "auto" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Duration != 0 || plan.Options.Confirmed {
 		t.Fatal(plan)
 	}
 	if len(plan.SuggestedGoals) != 1 || plan.SuggestedGoals[0] != "content" {

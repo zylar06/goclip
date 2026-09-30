@@ -68,13 +68,28 @@ func TestDownloadArgv(t *testing.T) {
 			t.Errorf("missing argv pair %q: %#v", pair, args)
 		}
 	}
-	for _, flag := range []string{"--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-cache-dir"} {
+	for _, flag := range []string{"--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-cache-dir", "--continue", "--concurrent-fragments", "--extractor-retries", "--retry-sleep"} {
 		if !hasArg(args, flag) {
 			t.Errorf("missing %s", flag)
 		}
 	}
 	if !reflect.DeepEqual(args[len(args)-2:], []string{"--", "https://youtu.be/dQw4w9WgXcQ"}) {
 		t.Fatal("URL must be a separate final positional argument")
+	}
+}
+
+func TestActionableBilibili412Error(t *testing.T) {
+	base := errors.New("yt-dlp: HTTP Error 412: Precondition Failed")
+	withoutCookies := actionableDownloadError("https://www.bilibili.com/video/BV1xx411c7mD", "", base)
+	if !strings.Contains(withoutCookies.Error(), "设置 → 导入 Cookie") || !errors.Is(withoutCookies, base) {
+		t.Fatalf("missing unauthenticated Bilibili guidance: %v", withoutCookies)
+	}
+	withCookies := actionableDownloadError("https://www.bilibili.com/video/BV1xx411c7mD", "cookies.txt", base)
+	if !strings.Contains(withCookies.Error(), "可能过期") || !errors.Is(withCookies, base) {
+		t.Fatalf("missing expired-cookie Bilibili guidance: %v", withCookies)
+	}
+	if got := actionableDownloadError("https://youtu.be/dQw4w9WgXcQ", "", base); got != base {
+		t.Fatalf("unrelated URL changed: %v", got)
 	}
 }
 

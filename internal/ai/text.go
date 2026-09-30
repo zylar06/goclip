@@ -14,7 +14,7 @@ import (
 //go:embed prompts/*.txt prompts/*/*.txt
 var prompts embed.FS
 
-const textPromptVersion = "semantic-tiers-2"
+const textPromptVersion = "chinese-hook-rubric-3"
 
 // Categories are the genre-specific prompt sets ported from upstream's
 // backend/prompt/<category>/ directories. An empty category, or one whose

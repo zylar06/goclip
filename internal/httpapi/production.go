@@ -12,8 +12,8 @@ import (
 )
 
 func validateProductionOptions(o domain.AnalysisOptions) error {
-	if o.Mode != "subtitle" && o.Mode != "visual" {
-		return bad("Choose subtitle or visual analysis")
+	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" {
+		return bad("Choose subtitle, smart or visual analysis")
 	}
 	if o.Duration != 0 && (o.Duration < 10 || o.Duration > 120) {
 		return bad("Choose automatic duration or an expected duration between 10 and 120 seconds")
@@ -107,6 +107,9 @@ func (a *API) validateProductionModels(options domain.AnalysisOptions) error {
 			kinds = append(kinds, "text")
 		}
 	}
+	if options.Mode == "auto" && options.AllowVisual {
+		kinds = append(kinds, "vision")
+	}
 	for _, kind := range kinds {
 		m, err := a.Store.Model(kind)
 		if errors.Is(err, store.ErrNotFound) {
@@ -117,6 +120,9 @@ func (a *API) validateProductionModels(options domain.AnalysisOptions) error {
 		}
 		if m.BaseURL == "" || m.Model == "" {
 			return bad("Configure the " + kind + " model before confirming")
+		}
+		if kind == "vision" && m.Capability != "" && m.Capability != "multimodal" {
+			return bad("Configure a multimodal vision model before confirming")
 		}
 	}
 	return nil

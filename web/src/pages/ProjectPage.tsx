@@ -82,7 +82,7 @@ function ProjectView({ projectId }: { projectId: string }) {
       <details className="studio-details"><summary>{t('Candidate scenes')} ({workspace.candidates.length})</summary>
         {!workspace.candidates.length && <p className="studio-muted">{t('暂无候选镜头。先完成一次分析。')}</p>}
         {workspace.candidates.map(candidate =>
-        <div className="studio-source-row" key={candidate.id}><div><b>{candidate.label}</b><p>{fmtDuration(candidate.start)}–{fmtDuration(candidate.end)} · {candidate.kind} · {candidate.score}</p><p className="studio-muted">{candidate.evidence}</p></div>
+        <div className="studio-source-row" key={candidate.id}><div><b>{candidate.label}</b><p>{fmtDuration(candidate.start)}–{fmtDuration(candidate.end)} · {candidate.kind} · {candidate.score} {candidate.disposition && `· ${candidate.disposition}`}</p><p className="studio-muted">{candidate.evidence}</p>{candidate.selection_reason && <p className="studio-muted">{candidate.selection_reason}</p>}</div>
           <Btn size="sm" disabled={busy} onClick={() => action(async () => {
             const draft = await api.createDraft(projectId, newDraft(candidate.label || t('New draft'), [{ ...candidate, id: newID() }].map(({ id, label, start, end, evidence }) => ({ id, label, start, end, evidence }))))
             navigate(`/project/${projectId}/studio/${draft.id}`)

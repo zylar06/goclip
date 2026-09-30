@@ -1,7 +1,6 @@
 name: autoclip-go
 x-common: &common
   image: autoclip-go:0.1.0
-  platform: linux/amd64
   init: true
   restart: unless-stopped
   read_only: true

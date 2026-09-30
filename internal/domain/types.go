@@ -55,8 +55,10 @@ type Scene struct {
 }
 type Candidate struct {
 	Scene
-	Score float64 `json:"score"`
-	Kind  string  `json:"kind"`
+	Score           float64 `json:"score"`
+	Kind            string  `json:"kind"`
+	SelectionReason string  `json:"selection_reason,omitempty"`
+	Disposition     string  `json:"disposition,omitempty"`
 }
 type Draft struct {
 	ID                   string  `json:"id"`
@@ -170,14 +172,16 @@ type AnalysisOptions struct {
 	BurnSubtitles bool     `json:"burn_subtitles,omitempty"`
 }
 type ModelSettings struct {
-	BaseURL string `json:"base_url"`
-	Model   string `json:"model"`
-	APIKey  string `json:"api_key"`
+	BaseURL    string `json:"base_url"`
+	Model      string `json:"model"`
+	APIKey     string `json:"api_key"`
+	Capability string `json:"capability,omitempty"`
 }
 type ModelStatus struct {
 	BaseURL    string `json:"base_url"`
 	Model      string `json:"model"`
 	Configured bool   `json:"configured"`
+	Capability string `json:"capability"`
 }
 type ExportPayload struct {
 	Draft Draft `json:"draft"`

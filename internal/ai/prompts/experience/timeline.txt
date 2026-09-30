@@ -1,17 +1,2 @@
-Adapted from upstream backend/prompt/experience/时间点.txt.
-Locate the supplied topics in this exact subtitle chunk.
-
-Cut on procedural boundaries. A clip must contain a usable unit of instruction:
-start on the problem or the first step, end after the step's purpose or result
-is stated. A procedure cut partway through leaves the viewer unable to act, so
-prefer completing the sequence.
-
-Keep a warning attached to what it warns about. Never cut mid-step.
-Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
-descriptions of the same discussion may later be merged. Include useful opening
-and closing content. All bounds must quote cue boundaries in source seconds.
-The supplied profile overrides every duration rule written above: keep clips
-between min_seconds and max_seconds where source evidence permits. Do not add
-silence or invent content merely to satisfy a minimum. Prefer adjacent related
-discussion for short fragments. Return only a nonempty JSON array:
-[{"topic_id":"topic-1","start":0.0,"end":30.0}]
+在本字幕片段定位主题，按操作流程边界切分。片段应是可执行的教学单元：从问题或第一步开始，到步骤目的或结果说完后结束。流程中途截断会使观众无法行动，应优先保留完整序列；警告必须连同其针对对象，绝不在步骤中间切断。
+每个 topic_id 最多一次，边界必须是输入 cue 的源秒数。profile 时长优先；不要为凑时长加入沉默或无关内容。只返回非空 JSON 数组：[{"topic_id":"topic-1","start":0.0,"end":30.0}]。

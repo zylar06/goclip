@@ -469,8 +469,8 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 	if !o.Confirmed {
 		return bad("Confirm production before analysis")
 	}
-	if o.Mode != "subtitle" && o.Mode != "visual" {
-		return bad("Choose subtitle or visual analysis")
+	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" {
+		return bad("Choose subtitle, smart or visual analysis")
 	}
 	if o.Mode == "visual" && !o.AllowVisual {
 		return bad("Visual analysis requires explicit permission to upload sampled images")
@@ -746,7 +746,13 @@ func (a *API) modelStatus(kind string) (domain.ModelStatus, error) {
 	if e != nil {
 		return domain.ModelStatus{}, e
 	}
-	return domain.ModelStatus{BaseURL: m.BaseURL, Model: m.Model, Configured: m.BaseURL != "" && m.Model != ""}, nil
+	capability := m.Capability
+	if capability == "" && kind == "vision" {
+		// Existing separate visual configurations predate explicit capability
+		// metadata and are intentionally kept compatible.
+		capability = "multimodal"
+	}
+	return domain.ModelStatus{BaseURL: m.BaseURL, Model: m.Model, Configured: m.BaseURL != "" && m.Model != "", Capability: capability}, nil
 }
 func (a *API) settings(w http.ResponseWriter, r *http.Request) error {
 	text, e := a.modelStatus("text")
@@ -775,6 +781,17 @@ func (a *API) saveSettings(w http.ResponseWriter, r *http.Request) error {
 	m.BaseURL = strings.TrimRight(strings.TrimSpace(m.BaseURL), "/")
 	m.Model = strings.TrimSpace(m.Model)
 	m.APIKey = strings.TrimSpace(m.APIKey)
+	m.Capability = strings.TrimSpace(m.Capability)
+	if m.Capability == "" {
+		if kind == "vision" {
+			m.Capability = "multimodal"
+		} else {
+			m.Capability = "text"
+		}
+	}
+	if m.Capability != "text" && m.Capability != "multimodal" {
+		return bad("Model capability must be text or multimodal")
+	}
 	if m.APIKey == "" {
 		old, e := a.Store.Model(kind)
 		if e != nil && !errors.Is(e, store.ErrNotFound) {

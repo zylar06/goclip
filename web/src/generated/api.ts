@@ -13,12 +13,14 @@ export type AnalysisOptions = {
 }
 
 export type Candidate = {
+  "disposition"?: string;
   "end": number;
   "evidence": string;
   "id": string;
   "kind": string;
   "label": string;
   "score": number;
+  "selection_reason"?: string;
   "start": number;
 }
 
@@ -90,11 +92,13 @@ export type InspectOptions = {
 export type ModelSettings = {
   "api_key": string;
   "base_url": string;
+  "capability"?: string;
   "model": string;
 }
 
 export type ModelStatus = {
   "base_url": string;
+  "capability": string;
   "configured": boolean;
   "model": string;
 }

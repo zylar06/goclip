@@ -4,9 +4,46 @@
 
 > **只用于本机或可信内网。** 没有登录和用户隔离，访问者共用项目、密钥和模型调用费用，不要直接开放公网。
 
+## 部署前准备
+
+### 运行环境
+
+项目使用 Linux 容器。macOS 的 Docker Desktop 默认运行 Linux containers；Windows 用户在 Docker Desktop 中选择 **Switch to Linux containers**。Linux 用户安装 Docker Engine 和 Docker Compose 插件即可。
+
+确认 Docker 容器类型：
+
+```sh
+docker info --format '{{.OSType}}'
+```
+
+命令输出 `linux` 后即可启动。Apple Silicon Mac 会构建 arm64 镜像，Windows 和 Intel Mac 通常构建 amd64 镜像。
+
+首次构建需要下载基础镜像、Python 依赖、`yt-dlp`、Whisper 模型和 Python 媒体引擎。Docker Desktop 建议分配至少 8 GB 内存。视频处理、语音转写和模型调用会占用 CPU、内存、磁盘和网络资源。
+
+### 模型配置
+
+AI 功能需要 OpenAI Chat Completions 兼容服务。文本模型处理字幕、时间段和标题；视觉模型读取抽样视频帧并识别画面事件。
+
+可以在网页的 **设置** 中填写，也可以在项目根目录的 `.env` 中配置：
+
+```dotenv
+AUTOCLIP_TEXT_BASE_URL=https://example.com/compatible-mode/v1
+AUTOCLIP_TEXT_MODEL=your-text-model
+AUTOCLIP_TEXT_API_KEY=your-text-api-key
+AUTOCLIP_VISION_BASE_URL=https://example.com/compatible-mode/v1
+AUTOCLIP_VISION_MODEL=your-vision-model
+AUTOCLIP_VISION_API_KEY=your-vision-api-key
+```
+
+Base URL 填兼容接口的根地址，不要追加 `/chat/completions`。保存后可在设置页分别测试两种模型。视觉模型必须支持图片输入。密钥不要提交到 Git 或发送给他人。
+
+### B 站 Cookie
+
+B 站可能对未登录下载请求返回 HTTP 412。使用浏览器登录 B 站，通过 Cookie-Editor 导出 Netscape 格式的 `cookies.txt`，再到 **设置 → 导入 Cookie** 上传。Cookie 等同于账号凭据，只上传自己的文件；过期后重新导出即可。
+
 ## 启动
 
-先安装并启动 Docker，使用 Linux 容器；当前镜像面向 amd64。Windows 可用 Docker Desktop。
+先安装并启动 Docker Desktop，使用 Linux 容器。Windows 和 macOS（Intel 与 Apple Silicon）都可运行；Apple Silicon 会构建并运行原生 arm64 镜像。
 
 ```sh
 git clone https://github.com/zylar06/goclip.git autoclip-go
@@ -28,6 +65,17 @@ docker compose up -d --build --wait --wait-timeout 180
 
 手动剪辑不需要云模型。需要字幕但没有可用字幕时，程序可在本地转写。新增字幕默认关闭，也不会移除原视频已有的字幕。当前不支持翻译和 AI 改写。
 
+### 自动构图
+
+选择 9:16 竖屏后，视觉高光和 Python 高光引擎都会生成自动构图数据：
+
+1. 模型确定高光片段的时间范围。
+2. Python 引擎使用 MediaPipe/OpenCV 抽样检测人脸。
+3. 引擎跟踪人脸和镜头变化，生成动态裁切路径。
+4. 导出阶段按照裁切路径生成竖屏 MP4。
+
+检测不到人脸时，系统使用居中裁切。视觉模型负责理解画面和选择事件；逐帧构图由本地视觉算法完成。草稿编辑页的 **应用竖屏推荐** 会设置 9:16、满屏取景和适合竖屏的标题样式。保存草稿后再导出，自动构图才会进入成片流程。
+
 ## 配置模型
 
 在网页的 **设置** 中填写并保存：
@@ -44,6 +92,32 @@ docker compose up -d --build --wait --wait-timeout 180
 - 改端口等部署配置：将 `.env.example` 复制为 `.env` 后修改，**不要覆盖已有 `.env`**。
 - 若已在 `.env` 配置模型，重启服务会重新应用它，覆盖网页中的临时修改。不要提交或分享密钥文件。
 
+## 架构与处理流程
+
+```text
+浏览器 React
+    │ HTTP / SSE
+    ▼
+Go Web 服务 ── SQLite、加密设置、项目和任务队列
+    │
+    └── Go Worker
+          ├── yt-dlp / FFmpeg：下载、探测、抽帧、预览、导出
+          ├── whisper.cpp：本地语音转写
+          ├── OpenAI 兼容文本模型：字幕分析和标题
+          ├── OpenAI 兼容视觉模型：抽样画面事件分析
+          └── Python AutoClip engine：MediaPipe 构图、字幕和动态裁切
+```
+
+一次任务的主要流程如下：
+
+1. Web 服务创建项目和任务记录。
+2. Worker 下载或校验原视频，写入 `data` Docker volume。
+3. Worker 按选择的模式调用本地转写、文本模型或视觉模型。
+4. 选择竖屏时，Python engine 生成人脸跟踪裁切路径；Go 保存草稿和任务状态。
+5. Worker 调用 FFmpeg 生成预览或 MP4，并通过 SSE 更新页面。
+
+`web` 提供网页、HTTP API 和任务状态；`worker` 执行耗时任务；`data` 保存 SQLite、原片、草稿和导出文件；`models` 保存 Whisper 和 Python 引擎模型。Python 进程通过 NDJSON 接口接收单个任务，不直接访问 SQLite。
+
 ## 常用命令
 
 在项目目录执行：
@@ -58,6 +132,34 @@ docker compose up -d --build --wait --wait-timeout 180
 | 修改 `.env` 后应用 | `docker compose up -d --no-build --wait --wait-timeout 180` |
 
 更新前先备份，等正在制作的任务结束再重启。视频、草稿和设置保存在 Docker 数据卷里，**不要用 `docker compose down -v` 排障，会删数据**。备份和恢复步骤见 `doc_auto/operations.md`。
+
+## 常见问题
+
+### 容器没有启动
+
+运行 `docker compose ps`，确认 `web` 和 `worker` 都显示 `healthy`。查看日志：
+
+```sh
+docker compose logs --tail=100 web worker
+```
+
+### 模型测试失败
+
+检查 Base URL、模型 ID、API Key 和容器网络访问权限。视觉分析还需要确认模型支持图片输入，并在任务中允许上传抽样帧。
+
+### B 站导入失败
+
+HTTP 412 通常表示 B 站要求登录验证。上传新的 Netscape Cookie 后重试。下载中出现 CDN 断流时，直接重试任务，下载器会使用断点续传和有限重试。
+
+### Python engine 缺少图形库
+
+更新代码后重新构建镜像：
+
+```sh
+docker compose up -d --build --wait --wait-timeout 180
+```
+
+当前镜像包含 `libEGL.so.1` 和 `libGLESv2.so.2`，用于 MediaPipe、OpenCV 和自动构图。
 
 ## 分支与检查
 

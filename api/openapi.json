@@ -49,6 +49,9 @@
       "Candidate": {
         "additionalProperties": false,
         "properties": {
+          "disposition": {
+            "type": "string"
+          },
           "end": {
             "type": "number"
           },
@@ -66,6 +69,9 @@
           },
           "score": {
             "type": "number"
+          },
+          "selection_reason": {
+            "type": "string"
           },
           "start": {
             "type": "number"
@@ -353,6 +359,9 @@
           "base_url": {
             "type": "string"
           },
+          "capability": {
+            "type": "string"
+          },
           "model": {
             "type": "string"
           }
@@ -370,6 +379,9 @@
           "base_url": {
             "type": "string"
           },
+          "capability": {
+            "type": "string"
+          },
           "configured": {
             "type": "boolean"
           },
@@ -380,7 +392,8 @@
         "required": [
           "base_url",
           "model",
-          "configured"
+          "configured",
+          "capability"
         ],
         "type": "object"
       },

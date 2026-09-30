@@ -64,6 +64,8 @@ func LocalPlan(p Project, revision int) ProductionPlan {
 		reason = "素材无音轨且没有可用字幕；可选择视觉高光，或手动剪辑。"
 	}
 	return ProductionPlan{Revision: revision, Status: "awaiting_confirmation",
-		Options:        AnalysisOptions{Mode: "subtitle", Goals: goals, Aspect: "original"},
+		// Smart is safe by default: it remains local/subtitle-only until this
+		// specific production confirms sampled-frame transmission.
+		Options:        AnalysisOptions{Mode: "auto", Goals: goals, Aspect: "original"},
 		SuggestedGoals: goals, Reason: reason}
 }

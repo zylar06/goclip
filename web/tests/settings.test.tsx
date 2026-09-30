@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import { CookiesForm, ModelForm } from '../src/pages/SettingsPage'
 import { mockHTTP, response } from './fixtures'
 
-const initial = { base_url: 'https://provider.test/v1', model: 'old-model', configured: true }
+const initial = { base_url: 'https://provider.test/v1', model: 'old-model', configured: true, capability: 'multimodal' }
 it('saves text and vision independently, clears entered keys, and tests saved settings only', async () => {
   const user = userEvent.setup()
   const fetch = mockHTTP((path, init) => path.endsWith('/test')

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"autoclip-go/internal/engine"
 	"autoclip-go/internal/httpapi"
 	"autoclip-go/internal/media"
 	"autoclip-go/internal/store"
@@ -111,11 +112,16 @@ func run() error {
 		return e
 	}
 	m := media.New(media.Config{FFmpeg: env("FFMPEG_PATH", "ffmpeg"), FFprobe: env("FFPROBE_PATH", "ffprobe"), YTDLP: env("YTDLP_PATH", "yt-dlp"), Whisper: env("WHISPER_PATH", "whisper-cli"), Model: env("WHISPER_MODEL", "models/ggml-base.bin"), FontDir: env("FONT_DIR", "assets/fonts"), MaxBytes: maxBytes, MaxDuration: float64(maxDuration)})
+	var pythonEngine *engine.Runner
+	if executable, script := os.Getenv("AUTOCLIP_ENGINE_PYTHON"), os.Getenv("AUTOCLIP_ENGINE_SCRIPT"); executable != "" && script != "" {
+		pythonEngine = &engine.Runner{Executable: executable, Args: []string{script}}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if mode == "worker" {
 		w := &worker.Worker{
 			Store: s, Media: m, MaxBytes: maxBytes, MaxDuration: float64(maxDuration),
+			Engine:      pythonEngine,
 			TaskTimeout: time.Duration(taskSeconds) * time.Second,
 			// Run owns the OS execution lock before calling HealthBeat. A
 			// standby must not make a stalled lock owner appear healthy.

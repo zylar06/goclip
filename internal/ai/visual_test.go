@@ -161,7 +161,7 @@ func TestVisualEducationalEvidenceAndPromptScope(t *testing.T) {
 		switch stage {
 		case "visual", "refine":
 			assertImages(t, parts, len(parts)/2)
-			for _, guidance := range []string{"educational", "on-screen text", "other", "audio"} {
+			for _, guidance := range []string{"教学", "屏幕文字", "other", "音频"} {
 				if !strings.Contains(prompt, guidance) {
 					t.Errorf("%s prompt lacks general-video guidance %q", stage, guidance)
 				}

@@ -37,7 +37,7 @@ export default function AnalysisPanel({ projectId, ready, active, onStarted }: {
     if (!valid || !confirmed) return
     setBusy(true); setError('')
     try {
-      await api.analyze(projectId, { mode, allow_visual: mode === 'visual' && images, confirmed: true, goals, duration, aspect, category, instruction })
+	await api.analyze(projectId, { mode, allow_visual: (mode === 'visual' || mode === 'auto') && images, confirmed: true, goals, duration, aspect, category, instruction })
       setOpen(false); setConfirmed(false); setImages(false); onStarted()
     } catch (cause) { setError(errorText(cause)) }
     finally { setBusy(false) }
@@ -47,7 +47,7 @@ export default function AnalysisPanel({ projectId, ready, active, onStarted }: {
     <fieldset className="studio-fieldset" disabled={!ready || active || busy}>
       <div className="studio-fields">
         <label className="studio-field">{t('Analysis mode')}<select value={mode} onChange={e => { setMode(e.target.value as AnalysisOptions['mode']); setImages(false); setConfirmed(false) }}>
-          <option value="subtitle">{t('Text / subtitles')}</option><option value="visual">{t('Vision / sampled frames')}</option>
+		  <option value="subtitle">{t('Text / subtitles')}</option><option value="auto">{t('Smart (subtitles first)')}</option><option value="visual">{t('Vision / sampled frames')}</option>
         </select></label>
         <label className="studio-field">{t('Target seconds')}<input type="number" min={10} max={120} value={duration} onChange={e => setDuration(Number(e.target.value))} /></label>
         <label className="studio-field">{t('Aspect')}<select value={aspect} onChange={e => setAspect(e.target.value as Draft['aspect'])}><option value="original">{t('Original')}</option><option value="portrait">9:16</option><option value="landscape">16:9</option></select></label>
@@ -63,7 +63,7 @@ export default function AnalysisPanel({ projectId, ready, active, onStarted }: {
         </label>)}</div>
       </div>
       <label className="studio-field">{t('Instructions (up to 4000 UTF-8 bytes)')}<textarea value={instruction} onChange={e => setInstruction(e.target.value)} /></label>
-      {mode === 'visual' && <label className="web-consent"><input type="checkbox" checked={images} onChange={e => setImages(e.target.checked)} />
+	  {(mode === 'visual' || mode === 'auto') && <label className="web-consent"><input type="checkbox" checked={images} onChange={e => setImages(e.target.checked)} />
         {t('I allow sampled video images to be uploaded to the saved vision model provider.')}
       </label>}
       {mode === 'visual' && <p className="web-warning">{t('Vision uses sampled images only, not audio or the full transcript. For lectures, interviews, or talking-head videos, use Text / subtitles to find highlights in the spoken content. No highlights may be found from images alone.')}</p>}

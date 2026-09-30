@@ -9,17 +9,18 @@ export function ModelForm({ kind, initial }: { kind: ModelKind; initial: ModelSt
   const [saved, setSaved] = useState(initial)
   const [baseURL, setBaseURL] = useState(initial.base_url)
   const [model, setModel] = useState(initial.model)
+	const [capability, setCapability] = useState(initial.capability || (kind === 'vision' ? 'multimodal' : 'text'))
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const dirty = baseURL !== saved.base_url || model !== saved.model || key !== ''
+	const dirty = baseURL !== saved.base_url || model !== saved.model || capability !== saved.capability || key !== ''
   const run = async (operation: 'save' | 'test') => {
     setBusy(operation); setError(''); setNotice('')
     try {
       if (operation === 'save') {
-        const result = await api.saveModel(kind, { base_url: baseURL.trim(), model: model.trim(), api_key: key })
-        setSaved(result); setBaseURL(result.base_url); setModel(result.model); setKey('')
+		const result = await api.saveModel(kind, { base_url: baseURL.trim(), model: model.trim(), api_key: key, capability })
+		setSaved(result); setBaseURL(result.base_url); setModel(result.model); setCapability(result.capability); setKey('')
         setNotice('Settings saved. The API key is not returned to this browser.')
       } else {
         const result = await api.testModel(kind)
@@ -34,6 +35,7 @@ export function ModelForm({ kind, initial }: { kind: ModelKind; initial: ModelSt
       <fieldset disabled={!!busy} className="studio-fieldset" aria-label={t(`${label} model settings`)}>
         <label className="studio-field">{t(`${label} base URL`)}<input type="url" required value={baseURL} onChange={e => setBaseURL(e.target.value)} placeholder="https://provider.example/v1" /></label>
         <label className="studio-field">{t(`${label} model name`)}<input required value={model} onChange={e => setModel(e.target.value)} /></label>
+		<label className="studio-field">{t('Model capability')}<select value={capability} onChange={e => setCapability(e.target.value)}><option value="text">{t('Text only')}</option><option value="multimodal">{t('Multimodal / image input')}</option></select></label>
         <label className="studio-field">{t(`${label} API key`)}<input type="password" value={key} onChange={e => setKey(e.target.value)} autoComplete="new-password" placeholder={t(saved.configured ? 'Leave empty to preserve the saved key' : 'Enter API key')} /></label>
         <p className="studio-muted">{t(saved.configured ? 'A key is configured on the server.' : 'No saved key configured.')} {t('An empty key preserves the existing key; it never clears it.')}</p>
         <p className="studio-muted">{t('Tests call the saved model and may incur a small charge. Unsaved form values are never sent by Test.')}</p>

@@ -11,14 +11,15 @@ import (
 )
 
 type visualEvent struct {
-	ID         string     `json:"id"`
-	Label      string     `json:"label"`
-	Start      *timestamp `json:"start"`
-	End        *timestamp `json:"end"`
-	Evidence   string     `json:"evidence"`
-	Kind       string     `json:"kind"`
-	Score      *float64   `json:"score"`
-	FrameTimes []float64  `json:"frame_times"`
+	ID              string     `json:"id"`
+	Label           string     `json:"label"`
+	Start           *timestamp `json:"start"`
+	End             *timestamp `json:"end"`
+	Evidence        string     `json:"evidence"`
+	Kind            string     `json:"kind"`
+	Score           *float64   `json:"score"`
+	SelectionReason string     `json:"selection_reason"`
+	FrameTimes      []float64  `json:"frame_times"`
 }
 
 type visualResult struct {
@@ -36,7 +37,7 @@ type refineDecision struct {
 // Scope prompt/checkpoint semantics to vision; text checkpoints are unchanged.
 // Version 5 omitted skip decisions, so its downstream chain cannot safely replay
 // under the new schema. Reject it at the scan checkpoint before another request.
-const visualPromptVersion = "general-visual-6"
+const visualPromptVersion = "chinese-visual-7"
 
 // Stage names are locally authored: a provider ID must never reach an error
 // message or a checkpoint filename (a provider could echo a credential in an
@@ -162,6 +163,9 @@ func validateVisual(value *visualResult, frames []domain.Frame, start, end, maxD
 		if !textOK(e.Evidence, 1000, false) {
 			return invalid("Visual event evidence must be valid UTF-8 text within 1000 characters.")
 		}
+		if !textOK(e.SelectionReason, 500, false) {
+			return invalid("Visual event selection_reason must be valid UTF-8 text within 500 characters.")
+		}
 		if strings.TrimSpace(e.Label) == "" {
 			e.Label = defaultVisualLabel
 		}
@@ -275,7 +279,7 @@ func visualCandidates(value visualResult) []domain.Candidate {
 	for _, e := range value.Events {
 		out = append(out, domain.Candidate{
 			Scene: domain.Scene{ID: e.ID, Label: e.Label, Start: float64(*e.Start), End: float64(*e.End), Evidence: e.Evidence},
-			Score: *e.Score, Kind: e.Kind,
+			Score: *e.Score, Kind: e.Kind, SelectionReason: e.SelectionReason, Disposition: "scan",
 		})
 	}
 	return out
@@ -464,6 +468,7 @@ func AnalyzeVisualWithSampler(ctx context.Context, client *Client, frames []doma
 		c := visualCandidates(*decision.Result)[0]
 		for j := range candidates {
 			if candidates[j].ID == c.ID {
+				c.Disposition = "refined"
 				candidates[j] = c
 			}
 		}

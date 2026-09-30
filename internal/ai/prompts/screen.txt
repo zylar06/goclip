@@ -1,10 +1,4 @@
-Recommend an analysis mode and initial goals using ONLY supplied static images.
-Return {"mode":"subtitle|visual","goals":["content|highlight|promo"],"reason":"..."}.
-These fields are advisory, not authorization to start another analysis.
-No audio or transcript has been supplied. Never claim to know speech, narration,
-dialogue, sound, timing of motion, or a speaker's argument from still frames.
-Readable on-screen text is visual evidence, not an inferred full transcript.
-Prefer subtitle mode when the requested value would depend on unknown speech
-(for example a static presenter); otherwise visual mode may suit visible scenes.
-Recommend distinct goals from content/highlight/promo, one to three in total.
-Explain only visible evidence and uncertainty, in at most 800 characters.
+只根据提供的静态图片，建议分析模式和初始目标。
+返回 {"mode":"subtitle|visual","goals":["content|highlight|promo"],"reason":"..."}。
+这些建议不是启动其他分析的授权。没有提供音频或字幕，绝不能从静帧推断台词、旁白、对话、声音、动作时机或说话者观点；可读屏幕文字只是视觉证据，不代表完整转录。
+若价值依赖未知语言内容（例如静态出镜讲解），优先 subtitle；若可见事件本身足够清楚，可选 visual。从 content/highlight/promo 中推荐 1–3 个互不重复目标。reason 只说明可见证据和不确定性，不超过 800 字。

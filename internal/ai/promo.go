@@ -9,7 +9,7 @@ import (
 	"autoclip-go/internal/domain"
 )
 
-const promoPromptVersion = "initial-promo-2"
+const promoPromptVersion = "chinese-hook-rubric-3"
 
 type promoWire struct {
 	CandidateID string `json:"candidate_id"`

@@ -35,8 +35,9 @@ RUN sh /tmp/apt-setup.sh
 
 FROM apt-base AS native
 ARG TARGETARCH
-RUN --mount=type=cache,id=autoclip-apt-native-amd64,target=/var/cache/apt,sharing=locked \
-    test "${TARGETARCH:-amd64}" = amd64 && apt-get update \
+RUN --mount=type=cache,id=autoclip-apt-native-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    case "${TARGETARCH}" in amd64|arm64) ;; *) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1;; esac \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl unzip cmake build-essential \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
@@ -55,22 +56,44 @@ RUN curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
 RUN curl -fL --retry 3 --connect-timeout 30 --max-time 1200 \
       https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin -o /out/models/ggml-base.bin \
     && echo "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe  /out/models/ggml-base.bin" | sha256sum -c -
-RUN curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
-      https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux -o /out/bin/yt-dlp \
-    && echo "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a  /out/bin/yt-dlp" | sha256sum -c - \
+RUN case "${TARGETARCH}" in \
+      amd64) yt_dlp_asset=yt-dlp_linux; yt_dlp_sha=58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a; deno_asset=deno-x86_64-unknown-linux-gnu.zip; deno_sha=c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490;; \
+      arm64) yt_dlp_asset=yt-dlp_linux_aarch64; yt_dlp_sha=b16e4dab368a816cd05d477d698a605a6ae87ccee1c8ffd38fa21d7254141fcc; deno_asset=deno-aarch64-unknown-linux-gnu.zip; deno_sha=c832298b1ad4422481334855f6003e0f54145762c5a134f20a489511d2f65bbf;; \
+      *) echo "unsupported architecture: ${TARGETARCH}" >&2; exit 1;; \
+    esac \
     && curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
-      https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-unknown-linux-gnu.zip -o deno.zip \
-    && echo "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490  deno.zip" | sha256sum -c - \
+      "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/${yt_dlp_asset}" -o /out/bin/yt-dlp \
+    && echo "${yt_dlp_sha}  /out/bin/yt-dlp" | sha256sum -c - \
+    && curl -fL --retry 3 --connect-timeout 30 --max-time 600 \
+      "https://github.com/denoland/deno/releases/download/v2.9.7/${deno_asset}" -o deno.zip \
+    && echo "${deno_sha}  deno.zip" | sha256sum -c - \
     && unzip deno.zip -d /out/bin \
     && chmod 755 /out/bin/* \
     && curl -fL --retry 3 --max-time 120 https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.08.19/LICENSE -o /out/licenses/yt-dlp.txt \
     && curl -fL --retry 3 --max-time 120 https://raw.githubusercontent.com/denoland/deno/v2.9.7/LICENSE.md -o /out/licenses/deno-MIT.txt \
     && curl -fL --retry 3 --max-time 120 https://raw.githubusercontent.com/openai/whisper/v20250625/LICENSE -o /out/licenses/whisper-model-MIT.txt
 
-FROM apt-base AS runtime
-RUN --mount=type=cache,id=autoclip-apt-runtime-amd64,target=/var/cache/apt,sharing=locked \
+# The Python engine is deliberately a build-only dependency of the Go service:
+# it has no web server or durable state.  Its pinned source revision keeps the
+# MediaPipe/faster-whisper pipeline reproducible while Go owns jobs and SQLite.
+FROM apt-base AS engine
+ARG TARGETARCH
+RUN --mount=type=cache,id=autoclip-apt-engine-${TARGETARCH},target=/var/cache/apt,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg fontconfig libstdc++6 libgomp1 \
+    && apt-get install -y --no-install-recommends python3 python3-venv git libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /engine
+COPY engine/requirements.txt ./requirements.txt
+RUN --mount=type=cache,id=autoclip-pip-${TARGETARCH},target=/root/.cache/pip \
+    python3 -m venv /opt/goclip-engine \
+    && /opt/goclip-engine/bin/pip install --no-cache-dir -r requirements.txt
+COPY engine/ /app/engine/
+
+FROM apt-base AS runtime
+ARG TARGETARCH
+RUN --mount=type=cache,id=autoclip-apt-runtime-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg fontconfig libstdc++6 libgomp1 python3 libgl1 libegl1 libgles2 libglib2.0-0 \
     && mkdir -p /usr/share/autoclip /app /data /models \
     && dpkg-query -W > /usr/share/autoclip/debian-packages.txt \
     && rm -rf /var/lib/apt/lists/* \
@@ -79,6 +102,8 @@ RUN --mount=type=cache,id=autoclip-apt-runtime-amd64,target=/var/cache/apt,shari
 COPY --from=native /out/bin/ /usr/local/bin/
 COPY --from=native /out/models/ /models/
 COPY --from=native /out/licenses/ /usr/share/autoclip/licenses/
+COPY --from=engine /opt/goclip-engine/ /opt/goclip-engine/
+COPY --from=engine /app/engine/ /app/engine/
 COPY --from=backend /out/autoclip /usr/local/bin/autoclip
 COPY --from=frontend /src/web/dist/ /app/web/
 COPY assets/fonts/ /app/assets/fonts/
@@ -87,6 +112,7 @@ RUN fc-cache -f /app/assets/fonts && chown -R 10001:10001 /data /models
 WORKDIR /app
 ENV AUTOCLIP_ADDR=0.0.0.0:8080 AUTOCLIP_DATA_DIR=/data AUTOCLIP_WEB_DIR=/app/web \
     WHISPER_MODEL=/models/ggml-base.bin FONT_DIR=/app/assets/fonts \
+    AUTOCLIP_ENGINE_PYTHON=/opt/goclip-engine/bin/python AUTOCLIP_ENGINE_SCRIPT=/app/engine/goclip_engine.py \
     HOME=/tmp XDG_CACHE_HOME=/tmp/cache
 USER 10001:10001
 EXPOSE 8080

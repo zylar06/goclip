@@ -1,18 +1,2 @@
-Adapted from upstream backend/prompt/speech/时间点.txt.
-Locate the supplied topics in this exact subtitle chunk.
-
-Cut on rhetorical boundaries. A clip must contain a complete beat: start where
-the setup begins, end after the payoff lands. Cutting a story before its point
-or a joke before its punchline destroys the clip, so extend to the payoff even
-when that costs a few seconds.
-
-Do not start on filler ("so", "anyway", "um") when the real opening is one cue
-later, and do not absorb the speaker's move into the next subject.
-Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
-descriptions of the same discussion may later be merged. Include useful opening
-and closing content. All bounds must quote cue boundaries in source seconds.
-The supplied profile overrides every duration rule written above: keep clips
-between min_seconds and max_seconds where source evidence permits. Do not add
-silence or invent content merely to satisfy a minimum. Prefer adjacent related
-discussion for short fragments. Return only a nonempty JSON array:
-[{"topic_id":"topic-1","start":0.0,"end":30.0}]
+在本字幕片段定位主题，按修辞节拍切分。片段必须包含完整节拍：从铺垫开始，到回报真正落下后结束。故事未到要点、笑话未到包袱时不能切，即使多占几秒也应保留回报。
+不要以“所以”“反正”“嗯”等废话开头；若下一条 cue 才是真正开头，应从那里开始。不要吞入说话者转向下一话题的内容。每个 topic_id 最多一次，边界必须是输入 cue 的源秒数。profile 时长优先；不要为凑时长加入沉默或无关内容。只返回非空 JSON 数组：[{"topic_id":"topic-1","start":0.0,"end":30.0}]。

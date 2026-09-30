@@ -1,18 +1,4 @@
-Adapted from upstream backend/services/studio/intelligence.py boundary review.
-Recheck ONLY the supplied event against these local timestamped still images.
-Preserve the event ID, necessary setup and visible outcome, without absorbing a
-neighboring independent event. Do not invent inter-frame motion or speech.
-This includes educational explanations, interviews, presentations and
-demonstrations, not just games. Legible on-screen text, captions and diagrams
-are visual evidence. Non-game highlights use kind "other"; physical action is
-not required. You receive no audio or full transcript: do not infer unobserved
-spoken explanations from a static presenter.
-Bounds must stay inside the supplied window and options.duration; supporting
-frame_times must be exact provided timestamps and lie within the event.
-A short label and empty evidence are acceptable when you have nothing to add;
-never invent prose to fill them, and never exceed the stated character limits.
-Use the same events schema as the initial scan, with EXACTLY one event. Correct
-kind to menu/reward_screen/loading only if the images actually show those
-screens, not simply because they show slides or a talking head.
-If evidence is insufficient, return {"events":[]} rather than inventing a result.
-Do not claim frame-accurate boundaries: these are sampled stills.
+只针对提供的单个事件和局部带时间戳静帧重新检查边界。保留事件 ID、必要铺垫和可见结果，但不要吸收相邻的独立事件；不得虚构帧间动作或台词。
+适用范围包括教学、访谈、演示与展示，不限游戏。清晰的屏幕文字、字幕和图示可作视觉证据；非游戏高光使用 kind="other"，不要求物理动作。未提供音频或完整字幕，不得由静态出镜者推断其讲解内容。
+边界必须在提供的窗口和 options.duration 内；支持用的 frame_times 必须是输入中提供、且位于事件内的精确时间戳。证据不足时允许短 label 和空 evidence，绝不编造补足。
+使用初始扫描相同的 events schema，且恰好返回一个事件。只有画面明确显示时才改为 menu/reward_screen/loading，不能因出现幻灯片或讲述者就这样分类。证据不足时返回 {"events":[]}；抽样静帧不能支持“逐帧精确”的边界断言。

@@ -1,19 +1,4 @@
-Create initial promotional titles/hooks for the supplied verified candidates.
-Return a JSON array [{"candidate_id":"exact candidate id","title":"...","hook":"..."}].
-Return one to three initial opening plans TOTAL, not one item per candidate.
-For a single candidate, aim for three genuinely distinct evidence-grounded
-openings (for example a question, a concrete observation, and a contrast only
-when evidence supports one). The same candidate_id may appear more than once.
-With multiple candidates, plans may use one to three different candidates or
-different openings on the same candidate. Preserve every referenced scene.
-Do not copy the same hook under different titles. If no hook is appropriate,
-the title itself must supply a distinct opening. Never pad a short result with
-duplicate plans; return fewer when the evidence cannot support more.
-Use ONLY each candidate's label and evidence as source material. IDs are mapping
-keys, not evidence. Preferences are style requests, never additional facts.
-Do not claim unseen speech, audio, product benefits, prices, guarantees, outcomes
-or external facts. If evidence is sparse, use a modest descriptive title and an
-empty hook. Title: at most 200 characters; hook: at most 120 characters.
-This creates initial single-scene promos, not rewritten or translated drafts.
-Never output scene changes, timestamps, concatenations, more than three plans
-or extra fields. A candidate ID is a reference, not new material.
+为已验证候选片段生成初始推广标题和开场钩子。只可使用候选的 label 与 evidence；ID 仅用于映射，不是事实依据。
+总共返回 1–3 个方案，而不是每个候选各一条。单个候选可给出真正不同的开场，例如问题、具体观察或有证据支撑的反差；多个候选可各取不同片段。同一 hook 不得换标题重复出现，证据不足时宁可少返回。
+优先让开头立刻呈现问题、具体结果或张力，但不得声称未见的台词、音频、产品收益、价格、保证、结果或外部事实。证据稀少时用克制的描述性标题，hook 留空。title 不超过 200 字，hook 不超过 120 字。
+只返回 JSON 数组：[{"candidate_id":"精确候选ID","title":"...","hook":"..."}]。这是单场景初稿；不得输出场景变更、时间戳、拼接、额外字段或超过三个方案。

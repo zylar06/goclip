@@ -17,6 +17,7 @@ export default function ImportReview() {
   const { workspace, loading, error, refresh, connections } = useWorkspace(id)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
+	const [allowScreening, setAllowScreening] = useState(false)
   const project = workspace.project
   const active = workspace.tasks.some(task => !terminal(task)) ||
     (workspace.workflows ?? []).some(w => ['queued', 'running', 'producing'].includes(w.status))
@@ -38,6 +39,11 @@ export default function ImportReview() {
             setBusy(true); setActionError('')
             try { await api.inspect(project.id); refresh() } catch (cause) { setActionError(errorText(cause)) } finally { setBusy(false) }
           }}>{t('Recheck local evidence (no model call)')}</Btn>
+		  <label className="web-consent"><input type="checkbox" checked={allowScreening} onChange={e => setAllowScreening(e.target.checked)} />{t('I allow four sampled images to be uploaded for an AI route recommendation. This does not start production.')}</label>
+		  <Btn disabled={active || busy || !allowScreening} onClick={async () => {
+			setBusy(true); setActionError('')
+			try { await api.inspect(project.id, true); setAllowScreening(false); refresh() } catch (cause) { setActionError(errorText(cause)) } finally { setBusy(false) }
+		  }}>{t('Recommend route from sampled images')}</Btn>
         </details>
         </div><div className="web-review-plan">
         <PlanSummary project={project} active={active} onChanged={refresh}

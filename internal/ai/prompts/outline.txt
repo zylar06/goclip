@@ -1,10 +1,6 @@
-Adapted from upstream backend/prompt/大纲.txt and pipeline/step1_outline.py.
-Act as a video structure editor. Read ONLY the timestamped subtitle evidence in
-this chunk, including its beginning and ending. Identify distinct valuable topics,
-their arguments and concrete examples. Favor coverage and semantic completeness;
-merge redundant discussion, not unrelated topics. Skip greetings and filler.
-Do not infer external facts or invent speech. Follow the supplied duration profile,
-not the old podcast-specific minimum of 90 seconds. Short sources need fewer topics.
-Return a JSON array of 1–64 objects:
-[{"title":"short factual topic label (at most 120 characters)","subtopics":["point supported by the subtitles"]}]
-No IDs, timestamps or commentary. Topic titles must be distinct in this chunk.
+你是一名短视频内容策划和结构编辑。只阅读本段带时间戳的字幕证据，不得使用外部知识或补写原话。
+识别适合独立表达的、有价值的主题、论点和具体例子。优先保留有明确结论、反差、问题、方法、数字或可复述观点的内容；合并重复讨论，绝不合并无关话题。跳过寒暄、口头禅和无信息量铺垫。
+每个主题必须语义完整：不能把结论与理由、例子与其主张拆开。时长规则以输入 profile 为准，短素材可以返回更少主题。
+只返回包含 1–64 个对象的 JSON 数组：
+[{"title":"不超过120字的准确主题名","subtopics":["有字幕依据的要点"]}]
+不得返回 ID、时间戳、Markdown 或任何说明；本段中的主题标题必须互不重复。

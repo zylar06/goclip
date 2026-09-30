@@ -169,7 +169,9 @@ func (w *Worker) produce(ctx context.Context, t domain.Task, dir string, progres
 			cache[mode] = r
 			return r
 		}
-		if mode == "subtitle" {
+		if mode == "subtitle" && w.Engine != nil {
+			r.drafts, r.candidates, r.err = w.engineCandidates(ctx, t, routeDir, options, progress)
+		} else if mode == "subtitle" {
 			cues, e := w.ensureTranscript(ctx, t.ProjectID, dir, progress)
 			if e != nil {
 				r.err = e
@@ -194,6 +196,9 @@ func (w *Worker) produce(ctx context.Context, t domain.Task, dir string, progres
 							func(ctx context.Context, times []float64) ([]domain.Frame, error) {
 								return w.Media.SampleAt(ctx, source, routeDir, times, progress)
 							})
+						if r.err == nil {
+							r.err = w.attachVisualReframes(ctx, dir, source, r.drafts, options.Aspect, progress)
+						}
 					}
 				}
 			}
@@ -217,6 +222,15 @@ func (w *Worker) produce(ctx context.Context, t domain.Task, dir string, progres
 			return err
 		}
 		mode := o.Mode
+		if mode == "auto" {
+			// Smart mode only sends frames when this particular production was
+			// explicitly authorized; otherwise it is the subtitle route.
+			if o.AllowVisual && g.Goal != "content" {
+				mode = "visual"
+			} else {
+				mode = "subtitle"
+			}
+		}
 		if g.Goal == "content" {
 			mode = "subtitle"
 		}
@@ -262,11 +276,21 @@ func (w *Worker) produce(ctx context.Context, t domain.Task, dir string, progres
 			}
 		} else {
 			for i, d := range selected {
+				originalID := d.ID
 				hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%d", wf.ID, g.Goal, d.ID, i)))
 				d.ID = fmt.Sprintf("%x", hash[:16])
+				if d.Origin == "python-engine" {
+					if err := moveEngineArtifact(dir, originalID, d.ID); err != nil {
+						return err
+					}
+				}
 				d.Goal = g.Goal
-				d.Subtitles = o.BurnSubtitles
-				d.Origin = mode + "-" + g.Goal
+				if d.Origin == "python-engine" {
+					d.Subtitles = true
+				} else {
+					d.Subtitles = o.BurnSubtitles
+					d.Origin = mode + "-" + g.Goal
+				}
 				if g.Goal == "content" {
 					d.Hook = ""
 					enabled := false

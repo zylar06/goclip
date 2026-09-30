@@ -1,6 +1,6 @@
 {
   "updated_at": "2026-09-29",
-  "platform": "linux/amd64",
+  "platforms": ["linux/amd64", "linux/arm64"],
   "debian_snapshot": "20260901T000000Z",
   "debian_source_default": "mirror",
   "debian_mirrors": {
@@ -25,10 +25,12 @@
   },
   "yt_dlp": {
     "version": "2026.08.19",
-    "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+    "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+    "arm64_sha256": "b16e4dab368a816cd05d477d698a605a6ae87ccee1c8ffd38fa21d7254141fcc"
   },
   "deno": {
     "version": "v2.9.7",
-    "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+    "sha256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490",
+    "arm64_sha256": "c832298b1ad4422481334855f6003e0f54145762c5a134f20a489511d2f65bbf"
   }
 }
