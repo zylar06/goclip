@@ -641,3 +641,23 @@ Update: 2026-09-30T15:04:00+08:00 — CI repair local verification completed.
 - The new workflow and process-state regressions had explicit failing controls
   before their fixes. Hosted push/PR green status is not inferred from local
   acceptance; it will be checked after this commit is pushed to PR #2.
+
+Update: 2026-09-30T15:24:00+08:00 — Branch/CI simplification verification.
+
+Before changing workflows, added regressions for PR-only automatic triggering,
+one daily job, same-PR cancellation and a separate manual container workflow.
+Against the old configuration, all three new cases failed and the existing
+race-environment test passed. After changes, all 25 script tests passed, zero
+failures/skips: CI, browser harness, APT setup, Compose deployment and Docker
+smoke-script regression suites. These tests validate configuration and isolated
+test harnesses, not a new full image build. The first full script run was blocked
+by Windows sandbox permissions on Git Bash temporary directories; the same
+command passed after explicit escalation, without changing test assertions.
+
+Evidence: artifacts/branch-cleanup/{inventory.json,ci-negative.log,
+regressions.log,regressions-final.log}. Inventory distinguishes merged PR #2 from
+still-open PR #3 and proves the old build branch's tip before lease-guarded
+deletion. README adds the new workflow to its per-file directory tree.
+No application logic changed, so full local Go/frontend suites were not rerun;
+the retained hosted PR check will run them after push. No production mutation,
+paid model request, PR merge or direct main push is part of this change.

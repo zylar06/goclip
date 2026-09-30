@@ -33,10 +33,43 @@ test('CI keeps race/native coverage and removes only race exit sleeps within the
   assert.equal(result.stdout.replaceAll('\r', ''), 'test -race -timeout 180s ./...\natexit_sleep_ms=0\n1\n')
 })
 
-test('workflow executes this regression gate and does not weaken the container tests', () => {
-  assert(workflow.includes('run: node --test scripts/ci.test.mjs'))
-  assert(workflow.includes('run: sh scripts/smoke-docker.sh'))
+function section(source, name) {
+  const match = source.match(new RegExp(`^${name}:\\r?\\n((?:[ \\t]+[^\\r\\n]*\\r?\\n|\\r?\\n)*)`, 'm'))
+  assert(match, `Expected a multiline ${name} section`)
+  return match[1]
+}
+
+test('daily CI runs once per main-targeting PR, with one job and no push duplicate', () => {
+  const events = section(workflow, 'on')
+  assert.deepEqual([...events.matchAll(/^  ([a-z_]+):/gm)].map(match => match[1]), ['pull_request', 'workflow_dispatch'])
+  assert.match(events, /^  pull_request:\r?\n    branches: \[main\]/m)
+  assert(!events.includes('paths'), 'Do not leave required checks pending by filtering entire workflows')
+  assert.deepEqual([...section(workflow, 'jobs').matchAll(/^  ([a-z_]+):/gm)].map(match => match[1]), ['test'])
+  assert.match(workflow, /timeout-minutes: 15/)
+  assert(workflow.includes('run: node --test scripts/ci.test.mjs scripts/parity-browser.test.mjs'))
+  assert(workflow.includes('run: go vet ./...'))
+  assert(workflow.includes('run: go run ./cmd/specgen && git diff --exit-code api/openapi.json'))
+  assert(workflow.includes('run: npm ci && npm run typecheck && npm test && npm run build'))
+  assert(!workflow.includes('smoke-docker.sh'), 'Daily code checks must not build the full container')
   assert(!workflow.includes('continue-on-error'))
+})
+
+test('new PR commits cancel only superseded runs of the same workflow and PR', () => {
+  const concurrency = section(workflow, 'concurrency')
+  assert(concurrency.includes('group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}'))
+  assert.match(concurrency, /^  cancel-in-progress: true$/m)
+})
+
+test('complete container verification remains manually runnable with tests and failure logs', () => {
+  const container = fs.readFileSync('.github/workflows/container.yml', 'utf8')
+  assert.deepEqual([...section(container, 'on').matchAll(/^  ([a-z_]+):/gm)].map(match => match[1]), ['workflow_dispatch'])
+  assert.deepEqual([...section(container, 'jobs').matchAll(/^  ([a-z_]+):/gm)].map(match => match[1]), ['container'])
+  assert(container.includes('run: sh scripts/smoke-docker.sh'))
+  assert.match(container, /timeout-minutes: 45/)
+  assert.match(container, /- if: always\(\)\r?\n        run: mkdir -p artifacts && docker compose logs --no-color > artifacts\/container.log/)
+  assert.match(container, /- if: always\(\)\r?\n        uses: actions\/upload-artifact@v4/)
+  assert(!container.includes('continue-on-error'))
+  assert.match(section(container, 'permissions'), /^  contents: read$/m)
   const dockerfile = fs.readFileSync('Dockerfile', 'utf8')
   assert(dockerfile.includes('CGO_ENABLED=0 go test -timeout 180s ./...'))
 })
