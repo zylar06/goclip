@@ -95,7 +95,7 @@ a.web-project-card:focus-visible{outline-offset:3px}
   border-radius:var(--ac-r-md);font-size:var(--ac-t-sm);
 }
 .web-task:first-of-type{margin-top:0}
-.web-task--active{border-left:3px solid var(--ac-accent)}
+.web-task--active{border-color:var(--ac-accent)}
 .web-task--failed{border-color:var(--ac-error)}
 .web-task>*{margin:0}
 .web-task p{overflow-wrap:anywhere;color:var(--ac-sub)}
@@ -264,8 +264,13 @@ a.web-project-card:focus-visible{outline-offset:3px}
 .web-plan-evidence{margin:0 0 16px;background:transparent}
 .web-plan-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 .web-source-tools{margin-top:28px;border-top:1px solid var(--ac-line);padding-top:12px}
-.web-source-tools>.studio-details{background:transparent;border-width:0 0 1px;border-radius:0;margin:0}
-.web-source-tools>.studio-details>summary{padding-left:0}
+.web-tool-nav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--ac-line);padding-bottom:0}
+.web-tool-tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--ac-sub);cursor:pointer;padding:10px 12px;margin-bottom:-1px;font:inherit;font-size:var(--ac-t-sm);font-weight:550;text-align:left}
+.web-tool-tab:hover{color:var(--ac-ink);background:var(--ac-sunken)}
+.web-tool-tab.is-active{color:var(--ac-accent-strong);border-bottom-color:var(--ac-accent)}
+.web-tool-panel{padding:16px 0 4px;min-width:0}
+.web-history-tools{margin-top:20px;border-top:1px solid var(--ac-line);padding-top:12px}
+.web-history-tools .web-tool-panel{border-bottom:1px solid var(--ac-line)}
 .web-workflow{padding:12px 0;border-bottom:1px solid var(--ac-line);margin-bottom:16px}
 .web-workflow h3{font-size:14px;margin:0 0 6px}
 .web-clip-details{font-size:12px;color:var(--ac-sub)}

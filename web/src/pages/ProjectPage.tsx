@@ -42,7 +42,7 @@ function ProjectView({ projectId }: { projectId: string }) {
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [transcript, setTranscript] = useState(false)
+  const [sourcePanel, setSourcePanel] = useState<'source' | 'subtitles' | 'candidates' | 'actions' | null>(null)
   const [disableSubtitles, setDisableSubtitles] = useState(false)
   const [subtitleNotice, setSubtitleNotice] = useState('')
   const project = workspace.project
@@ -75,11 +75,13 @@ function ProjectView({ projectId }: { projectId: string }) {
         })} />
       <div className="web-source-tools">
       {!taskActivity && <TaskPanel tasks={workspace.tasks} connections={connections} onRefresh={refresh} />}
-      <details className="studio-details"><summary>{t('Source video')}</summary>
-        {ready && <SourcePreview projectId={projectId} />}
-      </details>
-      <details className="studio-details" onToggle={e => setTranscript(e.currentTarget.open)}><summary>{t('Subtitles')}</summary>{transcript && ready && <Subtitles projectId={projectId} />}</details>
-      <details className="studio-details"><summary>{t('Candidate scenes')} ({workspace.candidates.length})</summary>
+      <nav className="web-tool-nav" aria-label={t('Project tools')}>
+        {([['source', t('Source video')], ['subtitles', t('Subtitles')], ['candidates', `${t('Candidate scenes')} (${workspace.candidates.length})`], ['actions', t('Project actions')]] as const).map(([key, label]) =>
+          <button type="button" key={key} className={`web-tool-tab${sourcePanel === key ? ' is-active' : ''}`} aria-pressed={sourcePanel === key} onClick={() => setSourcePanel(sourcePanel === key ? null : key)}>{label}</button>)}
+      </nav>
+      {sourcePanel === 'source' && <div className="web-tool-panel">{ready && <SourcePreview projectId={projectId} />}</div>}
+      {sourcePanel === 'subtitles' && <div className="web-tool-panel">{ready && <Subtitles projectId={projectId} />}</div>}
+      {sourcePanel === 'candidates' && <div className="web-tool-panel">
         {!workspace.candidates.length && <p className="studio-muted">{t('暂无候选镜头。先完成一次分析。')}</p>}
         {workspace.candidates.map(candidate =>
         <div className="studio-source-row" key={candidate.id}><div><b>{candidate.label}</b><p>{fmtDuration(candidate.start)}–{fmtDuration(candidate.end)} · {candidate.kind} · {candidate.score} {candidate.disposition && `· ${candidate.disposition}`}</p><p className="studio-muted">{candidate.evidence}</p>{candidate.selection_reason && <p className="studio-muted">{candidate.selection_reason}</p>}</div>
@@ -87,11 +89,12 @@ function ProjectView({ projectId }: { projectId: string }) {
             const draft = await api.createDraft(projectId, newDraft(candidate.label || t('New draft'), [{ ...candidate, id: newID() }].map(({ id, label, start, end, evidence }) => ({ id, label, start, end, evidence }))))
             navigate(`/project/${projectId}/studio/${draft.id}`)
           })}>{t('Use in new draft')}</Btn>
-        </div>)}</details>
-      <details className="studio-details"><summary>{t('Project actions')}</summary><div className="studio-actions">
+        </div>)}
+      </div>}
+      {sourcePanel === 'actions' && <div className="web-tool-panel"><div className="studio-actions">
         {workspace.drafts.some(d => d.subtitles) && <Btn disabled={active || busy} onClick={() => setDisableSubtitles(true)}>{t('Disable added subtitles in existing drafts…')}</Btn>}
         <Btn variant="danger" disabled={active || busy} onClick={() => { setActionError(''); setDeleting(true) }}>{t('Delete project…')}</Btn>
-      </div></details>
+      </div></div>}
       </div>
       <Dialog open={deleting} title={t('Delete project permanently?')} onClose={() => !busy && setDeleting(false)} description={t('This removes the source, drafts, task history, and exports for all users. Active tasks must finish first.')}
         footer={<div className="studio-actions"><Btn disabled={busy} onClick={() => setDeleting(false)}>{t('Keep project')}</Btn><Btn variant="danger" loading={busy} disabled={active} onClick={() => action(async () => { await api.removeProject(projectId); navigate('/') })}>{t('Confirm permanent deletion')}</Btn></div>}>

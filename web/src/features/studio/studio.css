@@ -96,17 +96,17 @@ p.studio-error[role="alert"]::before{
 
 /* ------------------------------------------------------------- disclosure --- */
 .studio-details{
-  margin-top:var(--ac-s-4);border:1px solid var(--ac-line);
-  border-radius:var(--ac-r-md);background:var(--ac-card);
+  margin-top:var(--ac-s-4);border:0;border-top:1px solid var(--ac-line);
+  border-radius:0;background:transparent;
 }
 .studio-details>summary{
   color:var(--ac-ink);font-size:var(--ac-t-base);font-weight:550;cursor:pointer;
-  padding:var(--ac-s-3) var(--ac-s-4);border-radius:var(--ac-r-md);list-style-position:inside;
+  padding:var(--ac-s-3) 0;list-style-position:inside;
   transition:background var(--ac-t-micro) var(--ac-ease-out);
 }
 .studio-details>summary:hover{background:var(--ac-sunken)}
-.studio-details[open]>summary{border-bottom:1px solid var(--ac-line-2);border-radius:var(--ac-r-md) var(--ac-r-md) 0 0}
-.studio-details>*:not(summary){padding-left:var(--ac-s-4);padding-right:var(--ac-s-4)}
+.studio-details[open]>summary{border-bottom:1px solid var(--ac-line-2)}
+.studio-details>*:not(summary){padding-left:0;padding-right:0}
 .studio-details>*:nth-child(2){padding-top:var(--ac-s-3)}
 .studio-details>*:last-child:not(summary){padding-bottom:var(--ac-s-4)}
 
