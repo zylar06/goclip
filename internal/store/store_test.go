@@ -65,7 +65,10 @@ func TestQueueLifecycleAndRecovery(t *testing.T) {
 }
 func TestRevisionsFrozenExportAndPersistence(t *testing.T) {
 	s, p, task := setup(t)
-	if _, e := s.Cancel(task.ID); e != nil {
+	if _, e := s.Claim(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.Finish(task.ID, "completed", "", false); e != nil {
 		t.Fatal(e)
 	}
 	d := domain.NewDraft("标题", []domain.Scene{{ID: domain.ID(), Start: 1, End: 10}})

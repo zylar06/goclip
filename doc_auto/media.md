@@ -35,10 +35,17 @@ func OutputDimensions(info Info, aspect string) (int, int)
 func (*Tools) Probe(ctx context.Context, path string) (Info, error)
 func (*Tools) Download(ctx context.Context, url, directory, cookies string,
     progress domain.ProgressFunc) (video, subtitle string, err error)
+func (*Tools) DownloadWithSubtitles(ctx context.Context, raw, directory, cookies string,
+    includeSubtitles bool, progress domain.ProgressFunc) (video, subtitle string, err error)
 func (*Tools) Transcribe(ctx context.Context, video, outDir string,
     progress domain.ProgressFunc) ([]domain.Cue, error)
 func (*Tools) Sample(ctx context.Context, video, outDir string, duration float64,
     progress domain.ProgressFunc) ([]domain.Frame, error)
+func (*Tools) SampleAt(ctx context.Context, video, outDir string, times []float64,
+    progress domain.ProgressFunc) ([]domain.Frame, error)
+func (*Tools) Thumbnail(ctx context.Context, video string, at float64) ([]byte, error)
+func (*Tools) CompatiblePreview(ctx context.Context, source, outDir, output string,
+    progress domain.ProgressFunc) (Info, error)
 func (*Tools) Render(ctx context.Context, source, outDir, output string,
     draft domain.Draft, cues []domain.Cue, progress domain.ProgressFunc) (Info, error)
 func (*Tools) TitlePNG(draft domain.Draft, width, height int) ([]byte, error)
@@ -83,7 +90,19 @@ yt-dlp runs with no user configuration, plugin directories, cache, playlist or
 shell; bounded socket retries, byte/duration filters and no-live filtering.
 It merges/remuxes to MP4 and optionally converts Chinese/English subtitles to
 SRT. Unsupported/unavailable/filtered videos are explicit failures even if
-yt-dlp exits zero. Final media is probed and subtitles parsed before success.
+yt-dlp exits zero. Final media is probed and requested subtitles parsed before
+success.
+
+`Download` delegates to `DownloadWithSubtitles(..., true, ...)`, preserving its
+existing platform subtitle behavior and errors. With `includeSubtitles=false`,
+yt-dlp receives `--no-write-subs --no-write-auto-subs`, no subtitle language,
+format or conversion options; no downloaded sidecar is discovered, read or
+validated, and the returned subtitle path is empty. This permits callers with
+an explicitly uploaded SRT to avoid unrelated platform subtitle failures.
+Video validation, URL restrictions, progress errors, cookie isolation, native
+deadlines and failure cleanup are unchanged. The enabled path still propagates
+native conversion, sidecar read/size and SRT parse failures; it does not silently
+fall back to omitting an invalid requested track.
 
 `cookies` is a Netscape-cookie **file path**. A 0600 private copy prevents
 yt-dlp cookie-jar writeback into the caller's file, and is deleted on every exit.
@@ -111,11 +130,29 @@ placeholder transcription or paid fallback is generated. No audio track is an
 explicit error. WAV/SRT work files are always cleaned.
 
 Sample uses the first `duration` seconds (zero means the full source), rejects
-out-of-range windows, and writes at most 24 JPEGs. Count is
-`min(24, max(1, ceil(duration/10)))`; requested seek times are
-`i*duration/count`, starting at zero. Returned timestamps are these source-time
-seek targets, not inferred wall-clock times. JPEGs are at most 640 pixels wide.
-Successful sampling directories are retained for the caller; failures clean up.
+out-of-range windows (1 ms source-end tolerance), and writes at most 60 JPEGs.
+The upstream interval is `max(2, duration/60)`; seek targets are `i*interval`,
+rounded to milliseconds, with the upstream 100 ms end guard. Tiny videos still
+receive the first frame at zero. Returned timestamps are source-time seek
+targets, not inferred wall-clock times or decoded frame PTS.
+
+`SampleAt` accepts 1–60 finite, nonnegative source timestamps in caller order;
+it never sorts, truncates or silently drops requests. It copies and rounds the
+list to milliseconds. Duplicate times after rounding, or either original or
+rounded times at/after the source duration, fail before creating work files.
+This is the worker/AI dense second-pass sampling API. Successful sampling
+directories are retained for the caller; failures (including progress callback
+errors after a frame) clean the whole private directory.
+
+`Thumbnail` returns JPEG bytes only, without a browser-visible filesystem path
+or scratch image. It rejects nonfinite, negative and end/out-of-range times.
+FFmpeg accurate seek keeps the supplied target (six-decimal native argv); at a
+between-frame time it returns the first decoded frame at/after that target.
+Both thumbnail and sample extraction share bounded JPEG capture, header/pixel
+validation, a 2 MiB output limit and aspect-preserving downscale to at most
+640 pixels on either edge, without upscaling. Native failures, missing/corrupt
+JPEGs, excessive dimensions/bytes and deadlines are explicit errors. Thumbnail's
+30-second deadline covers probing plus extraction; callers may shorten it.
 
 ## Subtitle and render timeline
 
@@ -148,6 +185,33 @@ User text/paths never enter filter syntax. The generated graph is a **single
 that removed `-filter_complex_script`. Scratch filter asset names are fixed and
 relative, avoiding Windows drive/quote escaping errors.
 
+Source-end validation uses a 1 ms tolerance (matching the domain contract;
+changes to `internal/domain` are owned by the main agent). When `Subtitles` is
+false, Render neither validates nor remaps cues and creates no ASS/font assets.
+Malformed, absent or valid cues cannot cause a second subtitle layer in that
+mode; pre-existing hard subtitles are naturally retained in the source pixels.
+
+## Browser-compatible source preview
+
+`CompatiblePreview` is independent of draft rendering: it transcodes the full
+source into H.264/yuv420p plus AAC when audio exists, without title rasterization,
+subtitle burning, scene cuts, concat, frame-rate normalization or font access.
+It selects only the first video and audio streams and drops soft subtitles/data,
+chapters and metadata. Dimensions follow `OutputDimensions(info, "original")`.
+`-copyts` preserves input timing and A/V offsets, including nonzero input origins;
+there is no `-start_at_zero` or per-stream PTS reset. VFR frames use passthrough
+with a numeric microsecond encoder time base. Sources whose encoded output
+does not satisfy duration validation fail rather than publishing a misleading
+timeline.
+
+Source files are read-only. Preview reuses the subprocess limits, private work
+directory, duration/dimension/audio/byte checks, sync, immutable target checks
+and atomic publication used by Render. Both operations additionally verify the
+actual MP4 container, exactly one H.264/yuv420p video, zero or one AAC audio, and
+no extra streams before publication. Preview progress stages are `preview`
+(0–98 encoding, 100 only after publication) and `preview-validate` (99).
+Callback/cancellation/validation failure leaves no published preview.
+
 ## Titles and fonts
 
 Preview and export call the same Go `x/image/opentype` PNG rasterizer. Hook is
@@ -177,7 +241,8 @@ manifest's mixed line endings; binary font checksums are exact.
 Every command has a context deadline. Maximum/default operation budgets:
 probe 30 seconds; download 2 hours; audio extraction 1 minute + 2x source
 duration (cap 30 minutes); ASR 10 minutes + 20x duration (cap 4 hours);
-each sampled frame 1 minute; render 5 minutes + 30x duration (cap 2 hours).
+each sampled frame 30 seconds; thumbnail 30 seconds including probe;
+render/compatible preview 5 minutes + 30x duration (cap 2 hours).
 Caller deadlines can shorten all of these.
 
 Linux/Unix starts a separate process group and kills the group on cancellation.
@@ -299,3 +364,170 @@ its final 30–60s manual slice exported and independently verified as a 30s
 H.264/AAC MP4. See verification.md for the exact artifact/hash and final frames.
 ASR word errors and overlapping pre-existing hard captions remain content
 review issues; no paid AI highlight selection or transcript correction was run.
+
+Update: 2026-09-29T20:05:00+08:00 — `Sample` now rounds each frame timestamp to
+milliseconds (`math.Round(t*1000)/1000`). The AI layer transmits sample times to
+vision models as `%.3f`, so a time carrying more precision than that could not be
+matched back to its own frame when a model echoed it, which failed every visual
+analysis whose duration did not divide evenly. Frame count, spacing, the FFmpeg
+argument vector and output files are otherwise unchanged; `-ss` already received
+6-decimal seconds and still does. Covered by
+`TestSampleTimesAreMillisecondExact`, which fails against the previous sampler
+with 12.493333333333332.
+
+Update: 2026-09-30T11:10:00+08:00 — Bilibili URL import repaired in three ways
+after a user reported that a link the upstream Python app downloads fine failed
+here.
+
+The format selector hard-excluded `mcdn.bilivideo.cn` in every branch. Bilibili
+serves some videos' *only* audio streams from MCDN, so the selection became
+unsatisfiable and yt-dlp reported `Requested format is not available` for the
+whole import. Verified against the reported video: all three of its audio
+streams (30216/30232/30280) resolve to `mcdn.bilivideo.cn:8082` while its video
+streams come from `upos-sz-mirror*.bilivideo.com`. The selector is now tiered —
+all-regular-CDN, then video-regular with audio free, then both free, then the
+merged stream — so a regular-CDN pair still wins whenever one exists but an
+MCDN-only audio track no longer blocks the import. Measured on the same
+endpoint the exclusion was added to avoid: 7.61 MiB in 1 second at 3.9 MB/s, so
+the exclusion was guarding a transient failure that no longer reproduces. The
+existing `--socket-timeout 30 --retries 3` covers a genuinely slow MCDN host,
+and a slow import beats no import. The tiered selector resolves this video to
+`30080+30280` (avc1), which is also more edit-friendly than upstream's `100026`
+(av01).
+
+`--sub-langs` gained `ai-zh` in first position, matching upstream
+`bilibili_downloader.py:155`. That is Bilibili's machine-generated Chinese track
+and the only subtitle most Bilibili videos carry; `zh` does not match it,
+because yt-dlp expands a requested language to `lang` and `lang-suffix`, never
+`prefix-lang`. The post-download preference order was updated to match. Without
+this, Bilibili imports returned no subtitle and fell through to local ASR, which
+hard-fails wherever whisper.cpp is not installed.
+
+`--match-filters` was left unchanged. The intended fix was the documented
+`duration?<=N` optional-field form, so a video whose extractor reports no
+duration would not be silently filtered out. The pinned yt-dlp 2026.08.19
+rejects that syntax outright with `Invalid filter part`, in every spacing and
+grouping variant tried (`duration?<=N`, `duration ?<= N`, split across two
+`--match-filters` flags, and `!(duration>N)`), and shipping it broke every
+import in a live test. The working form is retained and the gap is still open:
+a missing-duration extractor is still filtered out and still surfaces only as
+`yt-dlp completed without a video`. Revisit when the pinned yt-dlp supports it.
+
+`b23.tv` share links are now supported, which is what Bilibili's own share sheet
+emits. The host allowlist is unchanged: `sourceURL` stays a pure function and
+only shape-checks the share code, returning the `errShortLink` sentinel;
+`Download` resolves exactly one redirect with a HEAD request and revalidates the
+destination through `sourceURL` before anything is fetched. Resolution lives in
+the worker, not in the web process, so the public API does not gain a
+caller-driven outbound request. A short link that resolves to a foreign host, a
+non-video page, or another short link is rejected rather than followed, and the
+error does not echo the resolved target. The cost is that an unresolvable share
+link fails inside the import task rather than at paste time. The BV-number
+pattern is now case-insensitive, matching upstream `[Bb][Vv]`.
+
+Tests: the `all-MCDN rejection` case asserted the removed behavior and was
+rewritten rather than retargeted — it now asserts the *ordering* guarantee (a
+regular-CDN pair first, at least one MCDN-tolerant fallback) instead of an exact
+string, so it survives future selector edits. New coverage for short-link shape
+acceptance, redirect revalidation against four bad destinations, single-hop
+resolution to a canonical URL, and query rejection on a short link. Negative
+controls: restoring the MCDN exclusion fails
+`TestDownloadFormatPrefersRegularCDNButFallsBackToMCDN` with `every group
+excludes MCDN, so MCDN-only audio cannot resolve`; disabling the `b23.tv` case
+fails `TestShortLinkShapeAcceptedAndResolutionDeferred`.
+
+Not fixed here, because it is a Bilibili account limitation rather than a code
+defect: without cookies the 1080P high-bitrate stream and the official/AI
+subtitle tracks are unavailable (`--list-subs` returns only `danmaku`).
+`cookies-from-browser` remains unsupported deliberately — the services run in a
+container and cannot read the host browser's cookie store; the cookies.txt
+upload path is the supported route.
+
+Update: 2026-09-30T12:47:56+08:00 — Added the worker-facing `SampleAt`,
+byte-returning `Thumbnail`, and clean-source `CompatiblePreview` APIs without
+changing their requested signatures or touching worker/HTTP/domain code.
+Sparse sampling now matches upstream's 60-frame / `max(2,duration/60)` scan,
+millisecond labels and 100 ms tail guard. Dense requests are validated as a
+whole and retained in caller order. JPEG extraction now validates complete JPEG
+decoding as well as dimensions and bounded stdout. Disabled render subtitles
+ignore all cues; source-end tolerance is 1 ms. Render and preview share verified,
+synced atomic MP4 publication with real codec checks.
+
+Offline native acceptance used the read-only installed Windows FFmpeg/ffprobe
+`N-126889-gb139ba11d8-20260926`. The controlled MPEG4/PCM fixture carries Chinese
+text at the top, 77 variable-rate video frames and a 440 Hz tone delayed 400 ms.
+Its H.264/AAC preview preserved every frame timestamp within 1 ms, produced
+6.011 seconds from the 6-second source, and retained the audio onset at 0.4000s
+and tone at 440 Hz. Source bytes were SHA-256 identical before/after. Top Chinese
+pixels remained one layer; three subtitle-off renders (nil, invalid and valid
+cues) each had zero added bottom subtitle pixels. The explicit subtitle-on
+positive control had 135 bright bottom pixels. A separate nonzero-origin
+fixture retained the first PTS at 5.000s and the full 6.000s duration.
+
+The nonzero-origin test caught truncation from combining `-copyts` with
+output `-t duration`; previews therefore encode the full validated source under
+native timeout/byte bounds instead of adding an absolute timestamp cutoff.
+The current FFmpeg build also rejected the historical `-enc_time_base -1`
+alias; a numeric `1:1000000` time base passes the actual VFR regression.
+Other new checks cover no-audio output, portrait JPEG bounds, exact seeks,
+60-frame acceptance, invalid/duplicate/end timestamps, corrupt/oversized JPEGs,
+codec/container/stream rejection, immutable targets, caller/native deadlines,
+callback cancellation and private-directory cleanup.
+
+Verification: `go test -mod=readonly ./internal/media -count=1 -timeout=120s -v
+-coverprofile=internal/media/.coverage.log` passed in **17.091s**, with
+**55 top-level tests / 97 including subtests**, zero failures, and **87.9%**
+statement coverage (`SampleAt`, sparse scheduling and JPEG extraction: 100%).
+`go vet -mod=readonly ./internal/media` and scoped `git diff --check` passed.
+All new tests, including real FFmpeg tests, ran; the sole skip is the existing
+opt-in `TestIntegrationWhisperOptional`, because CLI/model/speech-fixture
+environment variables are absent. No new ASR behavior or ASR test debt was
+introduced. No downloads, paid requests, keys or original-application writes.
+Go cache access-denied failures were retried with explicit escalation.
+
+Logs/artifacts (all inside the assigned media directory):
+`internal/media/.full-tests.log`, `.native-api-tests.log`, `.timeline-tests.log`,
+`.vet.log`, `.coverage.log`, and `.coverage-summary.log`. Native fixtures are
+generated under per-test temporary directories and cleaned by the Go test runner.
+Existing uncommitted downloader/URL fixes were preserved, not modified here.
+
+Update: 2026-09-30T13:21:42.6005111+08:00 — Review integration adds Draft.title_enabled: an explicit false produces a transparent opening-title PNG rather than falling back from empty Hook to Title. Missing/null preserves old drafts. Worker preview retry verifies an already-published checkpoint through VerifyPreview (source duration, output dimensions/audio and actual MP4 H264/yuv420p/AAC streams), then registers it without overwriting or re-encoding. Review1 permanent tests cover disabled-title rendering and valid orphan-preview recovery; final verification is tracked in verification.md.
+
+Update: 2026-09-30T13:34:02+08:00 — R2-09 media-only platform-subtitle opt-out.
+
+Added `DownloadWithSubtitles(ctx, raw, directory, cookies, includeSubtitles,
+progress)`; existing `Download` delegates with true. False explicitly disables
+both ordinary and automatic platform subtitles, omits all subtitle conversion
+options and skips sidecar discovery/read/validation. True retains deterministic
+language selection and propagates native conversion and subtitle validation
+failures. No worker/store/HTTP changes were made; worker selection based on an
+explicit uploaded subtitle and its integration regression remain main-owned.
+
+Permanent tests in `argv_test.go`, `download_subtitles_test.go` and the existing
+native test-binary helper in `process_test.go` cover legacy/true/false policies
+against missing, valid, empty, malformed, unreadable and oversized sidecars,
+plus simulated native conversion failure. Actual subprocess argv is checked.
+False still fails on filtered download, byte limit, invalid probe, native failure
+and progress rejection, with private-workspace cleanup. A real FFmpeg six-second
+audio/video fixture is copied by the fake native downloader and validated by
+real ffprobe: false succeeds without modifying its invalid unrelated SRT; true
+rejects that same SRT. This is offline orchestration coverage, not a live yt-dlp
+platform download or model call.
+
+Windows verification using the read-only installed FFmpeg/ffprobe, GOPROXY=off
+and GOSUMDB=off:
+- `go test -mod=readonly ./internal/media -run 'Test(Download|IntegrationDownload)'
+  -count=1 -timeout=60s -v`: 8 top-level tests + 26 subtests passed in 1.727s,
+  zero failures/skips. Log: `internal/media/.r2-09-targeted.log`.
+- `go test -mod=readonly ./internal/media -count=1 -timeout=120s -v`: 63 top-level
+  tests + 83 subtests passed in 26.678s, zero failures. Only the existing optional
+  real Whisper test skipped (speech/model environment not configured); no new
+  test skipped. Log: `internal/media/.r2-09-full.log`.
+- `go vet -mod=readonly ./internal/media`: exit 0; log
+  `internal/media/.r2-09-vet.log` (empty success output). Owned files gofmt clean;
+  scoped git diff --check passed. All preceding uncommitted edits preserved.
+
+Final R2-09 write scope: `internal/media/download.go`, `argv_test.go`,
+`process_test.go`, new `download_subtitles_test.go`, the three media-local logs
+above, and this document. Media implementation/testing is frozen for handoff;
+this does not claim acceptance of main's worker integration or review-2 overall.

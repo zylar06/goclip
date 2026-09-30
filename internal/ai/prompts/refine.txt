@@ -2,9 +2,17 @@ Adapted from upstream backend/services/studio/intelligence.py boundary review.
 Recheck ONLY the supplied event against these local timestamped still images.
 Preserve the event ID, necessary setup and visible outcome, without absorbing a
 neighboring independent event. Do not invent inter-frame motion or speech.
+This includes educational explanations, interviews, presentations and
+demonstrations, not just games. Legible on-screen text, captions and diagrams
+are visual evidence. Non-game highlights use kind "other"; physical action is
+not required. You receive no audio or full transcript: do not infer unobserved
+spoken explanations from a static presenter.
 Bounds must stay inside the supplied window and options.duration; supporting
 frame_times must be exact provided timestamps and lie within the event.
+A short label and empty evidence are acceptable when you have nothing to add;
+never invent prose to fill them, and never exceed the stated character limits.
 Use the same events schema as the initial scan, with EXACTLY one event. Correct
-kind to menu/reward_screen/loading if the evidence proves it is non-play content.
+kind to menu/reward_screen/loading only if the images actually show those
+screens, not simply because they show slides or a talking head.
 If evidence is insufficient, return {"events":[]} rather than inventing a result.
 Do not claim frame-accurate boundaries: these are sampled stills.

@@ -59,10 +59,15 @@ export const Section: React.FC<{
         </h2>
         {description && <p className="ac-sub">{description}</p>}
       </div>
-      {right && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>{right}</div>}
+      {right && <div className="ac-section-actions">{right}</div>}
     </div>
     {children}
   </section>
+)
+
+/* ---------- Status pill (shape + color, never color alone) ---------- */
+export const Pill: React.FC<{ tone?: 'neutral' | 'running' | 'ok' | 'warn' | 'error'; children?: React.ReactNode }> = ({ tone = 'neutral', children }) => (
+  <span className={`web-pill${tone === 'neutral' ? '' : ` web-pill--${tone}`}`}>{children}</span>
 )
 
 /* ---------- Setting row ---------- */
@@ -94,11 +99,18 @@ export const StatusDot: React.FC<{ tone: 'ok' | 'error' | 'accent' | 'muted'; la
   </span>
 )
 
-export const ProgressLine: React.FC<{ percent: number | null }> = ({ percent }) => (
-  <div className={`ac-line${percent === null ? ' ac-line--indeterminate' : ''}`} role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
-    <i style={{ width: percent === null ? '35%' : `${Math.max(0, Math.min(100, percent))}%` }} />
-  </div>
-)
+export const ProgressLine: React.FC<{ percent: number | null; tone?: 'accent' | 'done' | 'failed'; large?: boolean }> = ({ percent, tone = 'accent', large }) => {
+  const cls = ['ac-line']
+  if (percent === null) cls.push('ac-line--indeterminate')
+  if (tone === 'done') cls.push('ac-line--done')
+  if (tone === 'failed') cls.push('ac-line--failed')
+  if (large) cls.push('ac-line--lg')
+  return (
+    <div className={cls.join(' ')} role="progressbar" aria-label="Task progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
+      <i style={{ width: percent === null ? '38%' : `${Math.max(0, Math.min(100, percent))}%` }} />
+    </div>
+  )
+}
 
 /* ---------- Dialog ---------- */
 export const Dialog: React.FC<{
@@ -139,7 +151,7 @@ export const Dialog: React.FC<{
       <div ref={dialog} tabIndex={-1} className="ac-dialog" role="dialog" aria-modal="true" aria-labelledby={heading}>
         <h3 id={heading}>{title}</h3>
         {description && <p>{description}</p>}
-        <div style={{ marginTop: 18 }}>{children}</div>
+        <div className="ac-dialog-body">{children}</div>
         {footer && <div className="ac-dialog-foot">{footer}</div>}
       </div>
     </div>,

@@ -1,0 +1,10 @@
+Recommend an analysis mode and initial goals using ONLY supplied static images.
+Return {"mode":"subtitle|visual","goals":["content|highlight|promo"],"reason":"..."}.
+These fields are advisory, not authorization to start another analysis.
+No audio or transcript has been supplied. Never claim to know speech, narration,
+dialogue, sound, timing of motion, or a speaker's argument from still frames.
+Readable on-screen text is visual evidence, not an inferred full transcript.
+Prefer subtitle mode when the requested value would depend on unknown speech
+(for example a static presenter); otherwise visual mode may suit visible scenes.
+Recommend distinct goals from content/highlight/promo, one to three in total.
+Explain only visible evidence and uncertainty, in at most 800 characters.

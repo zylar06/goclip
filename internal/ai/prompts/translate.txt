@@ -1,9 +1,0 @@
-Translate the provided title, hook, scene labels and subtitle text faithfully into
-target_language (zh/en/ja). Preserve meaning, names, technical terms and all
-numbers. Do not add commentary, fabricate evidence or change timing. Translate
-ONLY the provided subtitle texts. IDs and cue indexes are immutable references.
-Return exactly:
-{"title":"nonempty, at most 200 characters","hook":"at most 120 characters",
-"scenes":[{"id":"existing scene ID","label":"at most 120 characters"}],
-"cues":[{"index":0,"text":"translated subtitle"}]}
-Include each supplied scene ID and cue index exactly once, in any order.

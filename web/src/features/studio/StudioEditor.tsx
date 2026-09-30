@@ -6,11 +6,12 @@ import { useBlocker, useNavigate, useParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { useWorkspace } from './useWorkspace'
-import { Draft, Scene, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, newID, applyRewrite } from './types'
+import { Draft, Scene, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, newID } from './types'
 import TaskPanel from '../../components/TaskPanel'
 import CandidatePicker from './CandidatePicker'
 import TitleArtwork from './TitleArtwork'
-import DraftVariantDialog from './DraftVariantDialog'
+import DraftPlayer from './DraftPlayer'
+import { PreviewControls, useSourcePreview } from './SourcePreview'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
 import { draftExportState } from './draftExportState'
 import './studio.css'
@@ -28,24 +29,26 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [instruction, setInstruction] = useState('')
   const [selected, setSelected] = useState(0)
   const [picker, setPicker] = useState<number | 'append' | null>(null)
   const sourceDuration = workspace.project?.duration
-  const [showVariant, setShowVariant] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showRendered, setShowRendered] = useState(false)
   const [showReload, setShowReload] = useState(false)
-  const [playbackError, setPlaybackError] = useState(false)
-  const [suggestion, setSuggestion] = useState<Draft | null>(null)
+  const [sourceMode, setSourceMode] = useState(false)
+  const [manualStart, setManualStart] = useState(0)
+  const [manualEnd, setManualEnd] = useState(1)
+  const [pickEnd, setPickEnd] = useState(false)
+  const preview = useSourcePreview(projectId)
+  const [destination, setDestination] = useState('')
+  const allowNavigation = useRef(false)
   const [undo, setUndo] = useState<Draft | null>(null)
-  const video = useRef<HTMLVideoElement>(null)
   const localKey = `autoclip.studio.${projectId}.${draftId}`
   const dirty = !!draft && JSON.stringify(draft) !== saved
-  const blocker = useBlocker(dirty || !!busy)
+  const blocker = useBlocker(() => !allowNavigation.current && (dirty || !!busy))
+  useEffect(() => { if (destination) { allowNavigation.current = true; navigate(destination) } }, [destination, navigate])
   const newerServerDraft = workspace.drafts.find(d => d.id === draftId && draft && d.revision > draft.revision)
   const artworkStyle = isArtworkStyle(draft?.title_style)
-  const scene = draft?.scenes[selected] || draft?.scenes[0]
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
   const exportState = draft ? draftExportState(draft, jobs) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
@@ -74,9 +77,6 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [draft, dirty])
-  useEffect(() => {
-    if (video.current && scene && !showRendered) video.current.currentTime = scene.start
-  }, [scene?.id, scene?.start, showRendered])
   const patch = (changes: Partial<Draft>) => { if (draft) { setDraft({...draft, ...changes}); setShowRendered(false); setError('') } }
   const save = async (): Promise<Draft> => {
     if (!draft) throw new Error(t("草稿不存在"))
@@ -98,15 +98,11 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       refresh(); setNotice("渲染已开始，可以离开页面，之后在导出记录查看")
     })
   }
-  const rewrite = async () => {
-    if (!draft || !instruction.trim()) return
-    await perform('rewrite', async () => setSuggestion(applyRewrite(draft, await studioApi.rewrite(projectId, draft, instruction.trim()))))
-  }
   const reload = () => perform('reload', async () => {
     const latest = await studioApi.get(projectId)
     const server = latest.drafts.find(d => d.id === draftId)
     if (!server) throw new Error(t('草稿不存在'))
-    setDraft(server); setSaved(JSON.stringify(server)); setSuggestion(null); setUndo(null)
+    setDraft(server); setSaved(JSON.stringify(server)); setUndo(null)
     setSelected(0); setShowRendered(false); setShowReload(false); setNotice('Latest saved revision loaded.')
     refresh()
   })
@@ -115,33 +111,60 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const updateScene = (i: number, update: Partial<Scene>) => patch({ scenes: draft.scenes.map((s, index) => index === i ? {...s,...update} : s) })
   return <div className="ac-page studio-editor-page">
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
-    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => perform('duplicate', async () => { await save(); setShowVariant(true) })}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{t("导出成片")}</Btn></div></header>
+    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted"><span className={`web-pill${dirty ? ' web-pill--warn' : ' web-pill--ok'}`}>{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")}</span> V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} loading={busy==='duplicate'} onClick={() => perform('duplicate', async () => {
+      const savedDraft = await save()
+      const created = await studioApi.duplicate(projectId, savedDraft.id, t('{{title}} · 新版本', { title: savedDraft.title.slice(0, 180) }))
+      try { localStorage.removeItem(localKey) } catch (cause) { console.warn('Old draft cache could not be removed', cause) }
+      setDestination(`/project/${projectId}/studio/${created.id}`)
+    })}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{t("导出成片")}</Btn></div></header>
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
-    {(error || newerServerDraft) && <p className="web-warning">{newerServerDraft && t('A newer saved revision is available. Local edits have not been overwritten.')} <Btn disabled={!!busy} onClick={() => setShowReload(true)}>{t('Reload latest saved draft…')}</Btn></p>}
-    {playbackError && <p className="studio-error" role="alert">{t('This browser cannot play the source. Timing edits and export remain available; try a browser-compatible MP4 source.')}</p>}
+    {(error || newerServerDraft) && <p className="web-warning">{newerServerDraft && t('A newer saved revision is available. Local edits have not been overwritten.')} <Btn size="sm" disabled={!!busy} onClick={() => setShowReload(true)}>{t('Reload latest saved draft…')}</Btn></p>}
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
-        <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} controls preload="metadata" muted={!draft.original_audio} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop'?'contain':'cover', objectPosition:`${(draft.crop_x)*100}% 50%`}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
-          {!showRendered && selected===0 && draft.hook && <TitleArtwork projectId={projectId} draft={draft}/>}
+        <div className="studio-video-frame">
+          {showRendered && previewUrl ? <video aria-label={t('Completed MP4')} controls src={previewUrl} /> :
+            <DraftPlayer src={preview.src} scenes={draft.scenes} sourceMode={sourceMode} selected={selected}
+              muted={!draft.original_audio} style={{height:'auto', aspectRatio: sourceMode ? undefined : draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined,
+                objectFit: !sourceMode && draft.layout==='crop'?'cover':'contain', objectPosition: (draft.crop_x*100)+'% 50%'}}
+              onPoint={time => { if (pickEnd) setManualEnd(time); else setManualStart(time) }}>
+              {!sourceMode && draft.title_enabled !== false && draft.hook && <TitleArtwork projectId={projectId} draft={draft}/>}
+            </DraftPlayer>}
         </div>
-      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 字幕、翻译以渲染结果为准")}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={() => setShowExport(true)}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div></section>
-      <aside className="studio-edit-panel"><h2>{t("改到满意，就导出。")}</h2><Btn size="sm" onClick={() => patch(portraitDesign(draft))}>{t("应用竖屏推荐")}</Btn><label className="studio-field">{t("成片名称")}<input maxLength={200} value={draft.title} onChange={e => patch({title:e.target.value})} /></label><label className="studio-field">{t("开头文字")}<textarea maxLength={120} value={draft.hook} placeholder={t("可留空；在首镜头最多显示 4 秒")} onChange={e => patch({hook:e.target.value})} /></label>
-        <div className="studio-field"><span>{t("标题模板")}</span><small className="studio-muted">{t("缩略图为设计参考，当前文案效果见预览。")}</small><div className="studio-template-options">{titlePresets.map(preset=><button type="button" key={preset.value} className={`studio-template studio-template--${preset.value} ${isArtworkStyle(preset.value)?'studio-template--art':''}`} aria-pressed={(draft.title_style) === preset.value} onClick={()=>patch({title_style:preset.value,title_template_version:isArtworkStyle(preset.value)?6:1,title_accent:null})}>{isArtworkStyle(preset.value)&&<img src={titleDesignThumbnails[preset.value]} alt="" width={360} height={240}/>}<span>{t(preset.label)}</span></button>)}</div></div>{artworkStyle && <details className="studio-details"><summary>{t("调整文字样式")}</summary><label className="studio-field">{t("样式版本")}<select aria-label={t("样式版本")} value={draft.title_template_version} onChange={e=>patch({title_template_version:Number(e.target.value) as Draft['title_template_version']})}>{titleVersions(draft.title_style).map(v=><option key={v.value} value={v.value}>{t(v.label)}</option>)}</select></label><label className="studio-field">{t("强调色")}<input type="color" aria-label={t("标题强调色")} value={draft.title_accent || (draft.title_style==='comic'?'#ffe52d':draft.title_style==='neon'?'#ccff00':draft.title_style==='editorial'?'#ff4826':draft.title_style==='pixel'?'#ed327c':draft.title_style==='frosted'?'#00e6dc':'#dfff00')} onChange={e=>patch({title_accent:e.target.value})}/></label><label className="studio-field">{t("文字大小")}<input type="range" aria-label={t("文字大小")} min=".75" max="1.2" step=".05" value={draft.title_scale} onChange={e=>patch({title_scale:Number(e.target.value)})}/></label><label className="studio-field">{t("文字位置")}<input type="range" aria-label={t("文字位置")} min=".06" max=".70" step=".01" value={draft.title_y} onChange={e=>patch({title_y:Number(e.target.value)})}/></label>{!['pixel','frosted'].includes(draft.title_style) && <label><input type="checkbox" checked={draft.title_motion} onChange={e=>patch({title_motion:e.target.checked})}/>{t("开启入场动效")}</label>}<p className="studio-muted">{t("预览使用实际文字图层。翻译与入场动效以渲染结果为准；支持手动换行。")}</p></details>}<label className="studio-field">{t("输出文字语言")}<select value={draft.language} onChange={e => patch({language:e.target.value as Draft['language']})}>{languages.map(l => <option key={l.value} value={l.value}>{l.value==='source' ? t('原语言') : l.label}</option>)}</select></label>
-        <p className="studio-muted">{t("选择翻译语言后，渲染时会翻译开头文字与所选原字幕。")}</p>
+      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 字幕以渲染结果为准")}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={() => setShowExport(true)}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div>
+        <div className="studio-actions"><Btn size="sm" aria-pressed={!sourceMode && !showRendered} onClick={() => { setSourceMode(false); setShowRendered(false) }}>{t('Play full draft')}</Btn>
+          <Btn size="sm" aria-pressed={sourceMode && !showRendered} onClick={() => { setSourceMode(true); setShowRendered(false) }}>{t('Source / choose cut points')}</Btn></div>
+        <PreviewControls preview={preview}/>
+        </section>
+      <aside className="studio-edit-panel"><h2>{t("改到满意，就导出。")}</h2><Btn size="sm" onClick={() => patch(portraitDesign(draft))}>{t("应用竖屏推荐")}</Btn><label className="studio-field">{t("成片名称")}<input maxLength={200} value={draft.title} onChange={e => patch({title:e.target.value})} /></label>
+        <label className="web-consent"><input type="checkbox" checked={draft.title_enabled ?? true} onChange={e=>patch({title_enabled:e.target.checked})}/>{t("添加开头标题")}</label>
+        <label className="studio-field">{t("开头文字")}<textarea maxLength={120} value={draft.hook} placeholder={t("可留空；在首镜头最多显示 4 秒")} onChange={e => patch({hook:e.target.value})} /></label>
+        <div className="studio-field"><span>{t("标题模板")}</span><small className="studio-muted">{t("缩略图为设计参考，当前文案效果见预览。")}</small><div className="studio-template-options">{titlePresets.map(preset=><button type="button" key={preset.value} className={`studio-template studio-template--${preset.value} ${isArtworkStyle(preset.value)?'studio-template--art':''}`} aria-pressed={(draft.title_style) === preset.value} onClick={()=>patch({title_style:preset.value,title_template_version:isArtworkStyle(preset.value)?6:1,title_accent:null})}>{isArtworkStyle(preset.value)&&<img src={titleDesignThumbnails[preset.value]} alt="" width={360} height={240}/>}<span>{t(preset.label)}</span></button>)}</div></div>{artworkStyle && <details className="studio-details"><summary>{t("调整文字样式")}</summary><label className="studio-field">{t("样式版本")}<select aria-label={t("样式版本")} value={draft.title_template_version} onChange={e=>patch({title_template_version:Number(e.target.value) as Draft['title_template_version']})}>{titleVersions(draft.title_style).map(v=><option key={v.value} value={v.value}>{t(v.label)}</option>)}</select></label><label className="studio-field">{t("强调色")}<input type="color" aria-label={t("标题强调色")} value={draft.title_accent || (draft.title_style==='comic'?'#ffe52d':draft.title_style==='neon'?'#ccff00':draft.title_style==='editorial'?'#ff4826':draft.title_style==='pixel'?'#ed327c':draft.title_style==='frosted'?'#00e6dc':'#dfff00')} onChange={e=>patch({title_accent:e.target.value})}/></label><label className="studio-field">{t("文字大小")}<input type="range" aria-label={t("文字大小")} min=".75" max="1.2" step=".05" value={draft.title_scale} onChange={e=>patch({title_scale:Number(e.target.value)})}/></label><label className="studio-field">{t("文字位置")}<input type="range" aria-label={t("文字位置")} min=".06" max=".70" step=".01" value={draft.title_y} onChange={e=>patch({title_y:Number(e.target.value)})}/></label>{!['pixel','frosted'].includes(draft.title_style) && <label><input type="checkbox" checked={draft.title_motion} onChange={e=>patch({title_motion:e.target.checked})}/>{t("开启入场动效")}</label>}<p className="studio-muted">{t("预览使用实际文字图层。入场动效以渲染结果为准；支持手动换行。")}</p></details>}
+
         <Row label={t("字幕")}><label><input type="checkbox" checked={draft.subtitles} onChange={e=>patch({subtitles:e.target.checked})} />{t("烧录原字幕")}</label></Row><Row label={t("声音")}><label><input type="checkbox" checked={draft.original_audio} onChange={e=>patch({original_audio:e.target.checked})} />{t("保留原声")}</label></Row>
         <details className="studio-details"><summary>{t("画面设置")}</summary><label className="studio-field">{t("画幅")}<select value={draft.aspect} onChange={e=>patch({aspect:e.target.value as Draft['aspect'], ...(e.target.value==='portrait'?{layout:'crop' as const}:{})})}><option value="original">{t("原画幅")}</option><option value="portrait">{t("9:16 竖屏")}</option><option value="landscape">{t("16:9 横屏")}</option></select></label><label className="studio-field">{t("构图")}<select value={draft.layout} onChange={e=>patch({layout:e.target.value as Draft['layout']})}><option value="fit">{t("完整画面 · 留边")}</option><option value="blur">{t("完整画面 · 模糊背景")}</option><option value="crop">{t("满屏取景")}</option></select></label>{draft.layout==='crop' && <label className="studio-field">{t("取景位置 · 左右移动")}<input aria-label={t("取景位置")} type="range" min="0" max="1" step=".01" value={draft.crop_x} onChange={e=>patch({crop_x:Number(e.target.value)})}/></label>}<p className="studio-muted">{draft.layout==='crop'?t("主体铺满画面。左右调整取景，检查角色、障碍与 HUD 是否完整。"):draft.aspect==='portrait'?t("当前保留横屏全画面，会产生留边；想铺满竖屏请选择「满屏取景」。"):t("保留原画面构图。")}</p></details>
       </aside></div>
-      <div className="studio-prompt"><input aria-label={t("文案修改要求")} placeholder={t("告诉 AI 怎么改文案，例如：开头改成一个简短的问题")} value={instruction} onChange={e=>setInstruction(e.target.value)} /><Btn variant="cta" loading={busy==='rewrite'} disabled={!instruction.trim()} onClick={rewrite}>{t("改一版文案")}</Btn></div>
       {undo && <Btn variant="text" onClick={()=>{setDraft({...undo, revision:draft.revision});setUndo(null);setShowRendered(false)}}>{t("撤销上次修改")}</Btn>}
       <details className="studio-details studio-source-details"><summary>{t("调整镜头")}{' '}<span className="ac-mono">{draft.scenes.length}</span>{' '}{t("· 顺序与起止点")}</summary>
         <Btn size="sm" disabled={draft.scenes.length >= 30} onClick={() => setPicker('append')}>{t("追加镜头")}</Btn>
-        {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>{t("起点（秒）")}<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>{t("终点（秒）")}<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>{t("替换")}</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>{t("上移")}</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>{t("下移")}</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>{t("移除")}</Btn></div></div>)}
+        <div className="studio-fields"><label className="studio-field">{t('Manual start (seconds)')}<input type="number" min="0" step=".001" value={manualStart} onChange={e => setManualStart(Number(e.target.value))}/></label>
+          <label className="studio-field">{t('Manual end (seconds)')}<input type="number" min="0" step=".001" value={manualEnd} onChange={e => setManualEnd(Number(e.target.value))}/></label>
+          <label>{t('Source point sets')}<select value={pickEnd ? 'end' : 'start'} onChange={e => setPickEnd(e.target.value === 'end')}><option value="start">{t('Start')}</option><option value="end">{t('End')}</option></select></label></div>
+        <Btn size="sm" disabled={draft.scenes.length >= 30} onClick={() => {
+          const next = {...draft, scenes: [...draft.scenes, {id:newID(), label:t('Manual range'), start:manualStart, end:manualEnd, evidence:''}]}
+          const invalid = draftError(next, sourceDuration)
+          if (invalid) { setError(t(invalid)); return }
+          setUndo(draft); patch({scenes:next.scenes})
+        }}>{t('Add manual range')}</Btn>
+        {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setSourceMode(true);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>{t("起点（秒）")}<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>{t("终点（秒）")}<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>{t("替换")}</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>{t("上移")}</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>{t("下移")}</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>{t("移除")}</Btn></div></div>)}
       </details>
     </fieldset>
-    {active && <div className="studio-render-state"><ProgressLine percent={active.percent}/><span className="studio-muted">{active.status==='queued'?t("等待渲染"):t("渲染成片")} · {active.percent === null ? t('Progress unavailable') : `${active.percent}%`}</span></div>}
+    {active && <div className="studio-render-state" role="status">
+      <div className="studio-render-head"><b>{active.status==='queued'?t("等待渲染"):t("渲染成片")}</b><span className="studio-render-percent">{active.percent === null ? t('Progress unavailable') : `${active.percent}%`}</span></div>
+      <ProgressLine percent={active.percent} large/>
+      <span className="studio-muted">{t("任务在后台继续，关闭面板不会取消渲染。")}</span>
+    </div>}
     {currentJob?.status==='failed' && <p className="studio-error" role="alert">{t(currentJob.error || '')}</p>}
-    {error && <p className="studio-error" role="alert">{error}</p>}<p className="studio-muted" role="status">{t(notice)}</p>
+    {error && <p className="studio-error" role="alert">{error}</p>}<p className={`studio-muted${notice ? ' web-note' : ''}`} role="status">{t(notice)}</p>
     {picker !== null && <CandidatePicker projectId={projectId} mode={picker === 'append' ? 'append' : 'replace'} onClose={() => setPicker(null)} onChoose={candidate => {
       try {
         const next = applyCandidate(draft, candidate, picker, newID())
@@ -149,16 +172,11 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
         setPicker(null); setNotice("镜头已更新，请保存后重新渲染。换镜头后请核对开头文案是否仍符合画面。")
       } catch(e) { setPicker(null); setError(t(errorText(e))) }
     }} />}
-    <DraftVariantDialog open={showVariant} projectId={projectId} draft={draft} onClose={() => setShowVariant(false)} onCreated={created => {
-      try { localStorage.removeItem(localKey) } catch (cause) { console.warn('Old draft cache could not be removed', cause) }
-      navigate(`/project/${projectId}/studio/${created.id}`)
-    }} />
-    <Dialog open={!!suggestion} onClose={()=>setSuggestion(null)} title={t("查看文案修改")} description={t("确认后应用到当前草稿，镜头与声音保持原设置。")} footer={<div className="studio-actions"><Btn onClick={()=>setSuggestion(null)}>{t("保留原稿")}</Btn><Btn variant="cta" onClick={()=>{setUndo(draft);setDraft(suggestion);setSuggestion(null);setShowRendered(false)}}>{t("应用修改")}</Btn></div>}><p>{suggestion?.title}</p><p>{suggestion?.hook || t("无开头文字")}</p></Dialog>
     <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={t("导出成片")} description={t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
-      <p className="studio-muted">{t('Export an immutable snapshot of this revision. Translation may use the saved text model and incur charges.')}</p>
-      <Row label={t("成片")}>{draft.title}</Row><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("Original aspect · longest edge up to 1920 px")}</Row><Row label={t("文字语言")}>{draft.language==='source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label}</Row>
-      <Row label={t("开头包装")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{draft.subtitles?t("烧录已有字幕"):t("已关闭")}</Row>
-      {active && <ProgressLine percent={active.percent}/>}<p className="studio-muted">{previewUrl?t("当前版本已渲染完成，可以直接下载。"):t("任务在后台继续，关闭面板不会取消渲染。")}</p>{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
+      <p className="studio-muted">{t('Export an immutable snapshot of this revision.')}</p>
+      <Row label={t("成片")}>{draft.title}</Row><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("Original aspect · longest edge up to 1920 px")}</Row>
+      <Row label={t("开头包装")}>{draft.title_enabled !== false && draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{draft.subtitles?t("烧录已有字幕"):t("已关闭")}</Row>
+      {active && <div className="studio-render-inline"><ProgressLine percent={active.percent} large/><span className="studio-render-percent">{active.percent === null ? t('Progress unavailable') : `${active.percent}%`}</span></div>}<p className="studio-muted">{previewUrl?t("当前版本已渲染完成，可以直接下载。"):t("任务在后台继续，关闭面板不会取消渲染。")}</p>{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
     </Dialog>
     <TaskPanel tasks={workspace.tasks} connections={connections} onRefresh={refresh} />
     <Dialog open={showReload} onClose={() => !busy && setShowReload(false)} title={t('Discard local edits and reload?')}

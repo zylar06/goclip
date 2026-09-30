@@ -14,7 +14,7 @@ import (
 )
 
 // Increment when prompts, stage schemas or deterministic quality rules change.
-const pipelineVersion = "autoclip-ai-1"
+const pipelineVersion = "autoclip-ai-2"
 
 type checkpoint struct {
 	Version   string          `json:"version"`
@@ -72,7 +72,7 @@ func (r *stageRunner) notify(ctx context.Context, stage string, percent float64)
 }
 
 func stage[T any](ctx context.Context, r *stageRunner, name string, before, after float64,
-	produce func() (T, error), validate func(T) error) (T, error) {
+	produce func() (T, error), validate func(*T) error) (T, error) {
 	var value T
 	if err := r.notify(ctx, name, before); err != nil {
 		return value, atStage(name, err)
@@ -121,7 +121,10 @@ func stage[T any](ctx context.Context, r *stageRunner, name string, before, afte
 	if err := contextError(ctx); err != nil {
 		return value, atStage(name, err)
 	}
-	if err := validate(value); err != nil {
+	if err := validate(&value); err != nil {
+		if cached {
+			return value, atStage(name, invalid("Checkpoint failed semantic validation; use a fresh directory."))
+		}
 		return value, atStage(name, err)
 	}
 	if !cached {

@@ -47,8 +47,27 @@ Restore to a fresh stopped deployment, replacing the matching volumes together.
 Do not overlay a different master.key. Confirm ownership before starting.
 Record the deployed image tag/digest and VERSION with each backup.
 For upgrades, backup first, retain the previous image, and run tests before rebuilding.
-Database schema version is 1; downgrades after future incompatible migrations
+Database schema version is 2; downgrades after incompatible migrations
 require restoring the matching full-volume backup and old image.
+
+Update: 2026-09-30T13:00:00+08:00 — Workflow-parity upgrades add schema-2
+workflow records and leave existing project/secret/export data intact. Back up
+the full data volume before deploying; an older schema-1 application will reject
+the upgraded database, so rollback uses the matching backup, not forced schema
+number changes. The current implementation branch and test binaries are not
+automatically deployed into the user's running services.
+
+Ingestion is now a local metadata/subtitle check; transcription begins only
+after production confirmation, or a subtitle-enabled export requires it.
+Content goals automatically queue exports. A partial workflow may contain
+downloadable files as well as failed goals; inspect per-goal/task errors and
+explicitly retry failed tasks instead of repeating the entire paid workflow.
+Added subtitles are off by default; pre-existing draft choices are not reset.
+
+Validation uses isolated databases/processes, blank production model environment
+and loopback mock providers. Real-provider A/B and user-video subjective checks
+require separate authorization/recorded outcomes. Test logs/screenshots belong
+under `artifacts/parity/<run-id>/`; never copy model keys or cookies into evidence.
 
 ## Tool upkeep
 Native downloads have fixed SHA256 checks. By default Debian packages come from
@@ -239,3 +258,58 @@ and volumes were removed afterward; the normal app/services/data were untouched.
 All 16 setup/deployment/smoke regressions pass. Logs:
 `artifacts/ci-smoke-local.*.log`, `artifacts/ci-smoke-local-result.json`,
 `artifacts/ci-smoke-regression-after.log`.
+
+Update: 2026-09-29T18:55:00+08:00 — Rebuilt and recreated the local web/worker
+services with the vision connection-test fixture fix (8×8 to 64×64). Both
+services are healthy; no active tasks existed before recreation, and persistent
+data/model volumes were retained. The actual saved vision test returned HTTP
+200 / `ok:true` for qwen3-vl-plus. No Base URL, key, cookie, or environment change
+was required. Diagnostic evidence: `artifacts/vision-probe-8.json`,
+`artifacts/vision-fixed-live-test.json`, and `artifacts/vision-fix-build.log`.
+These ignored artifacts contain no API keys. A successful synthetic connection
+test is not verification of full-video visual analysis or highlight quality.
+
+Update: 2026-09-29T19:17:00+08:00 — Deployed general-video visual prompts,
+separate `no_highlights` diagnostics and visual-only mode guidance. Full Go
+tests inside the Docker build and all 44 frontend tests passed; local AI/worker
+tests, vet and frontend typecheck also passed. Web and worker were recreated
+only after confirming zero active tasks and are healthy. All five projects'
+task IDs/statuses, draft counts and completed export counts remained unchanged;
+the served frontend bundle contains the new guidance. Historical failures were
+not rewritten, and no paid analysis/test request was made during this fix.
+Evidence: `artifacts/visual-guidance-before.log`, `visual-guidance-after.log`,
+`visual-guidance-build.log` and `visual-guidance-before-restart.json` (under
+`artifacts/`). Real-provider visual-highlight quality remains unverified.
+
+Update: 2026-09-30T13:21:42.6005111+08:00 — Workflow-parity verification remains isolated from the running 8080 deployment. Worker startup holds data/worker.lock with an OS advisory/exclusive file lock for checkpoint ownership; a paused process must exit before a standby worker can execute, and standby acquisition has a 90-second timeout. Lease fencing separately rejects stale DB writes. Only local filesystems supported; do not place SQLite/checkpoints on a network filesystem. Schema 2 remains a one-way additive update for old binaries: back up the entire data directory before deployment, and restore a matching backup to downgrade. No deployment or paid-model request was made by these review fixes.
+
+Update: 2026-09-30T13:40:00+08:00 — R2-12 health ownership fix: the worker
+command now supplies its heartbeat-file writer through `Worker.HealthBeat`.
+There is no independent command-level heartbeat goroutine. The worker invokes
+the callback only after acquiring the OS execution lock, on idle loop iterations,
+and from its one-second task monitor during execution. Standby processes cannot
+refresh the owner's shared `worker.heartbeat` and mask a stalled owner.
+The existing healthcheck still rejects a timestamp older than 30 seconds;
+this is data-directory owner health, not proof that every standby is healthy.
+Heartbeat write errors propagate through `Run`/`run()`; during a task the worker
+cancels execution and reports the failure rather than silently continuing.
+The OS lock is not expired or stolen to recover health.
+
+Permanent `cmd/autoclip/health_ownership_test.go` uses the real `run()` in child
+test processes and isolated temporary directories. It covers standby exclusion,
+initial publication and subsequent refresh by the owner, and initial/later
+write-error propagation. A directory at the heartbeat filename injects portable
+write failure. The standby test holds a real OS lock with a stale timestamp;
+it does not suspend an existing process. The new regression failed before the
+command change and the complete cmd package passes afterward. The original
+review overlay and main's active-task health-failure regression also pass.
+Logs: `artifacts/parity/20260930/r2-12-{before,after,integration,vet}.log`.
+All tests are offline; no running deployment or existing database was touched.
+Windows execution is verified here; the Linux race run started at 13:27
+predates this command change and requires a final-source cmd/worker rerun.
+
+Update: 2026-09-30T13:49:08.7123891+08:00 — Final-source Linux verification (13:39–13:42) supersedes the first timed-out run and includes the owner-only health callback and its regressions: all eight packages passed with race enabled, including real Whisper and native media tests, and vet passed. The container autoclip-parity-linux-20260930 exited 0; it had no network and no deployment data mounts. The initial package-download verification-image build was explicitly stopped after timeout; its BuildKit record is terminal Error, not an unattended build. The offline replacement reuses native libraries/models from the locally installed image and is a verification image, NOT a newly built production/release image. Existing web/worker deployment and volumes remain untouched.
+
+Update: 2026-09-30T13:59:28.3058828+08:00 — User explicitly requested starting the new version. Built the repository Dockerfile/Compose web image successfully in 52.2s (BuildKit Completed n8v88qvo9h32hjfffongtvbqr); build Go tests and 88 frontend tests passed. Both prior services had zero queued/running tasks and were cleanly stopped. Full data/model tar backups were made with numeric ownership/modes, listed successfully, checked for DB/master.key/model files and SHA-256 hashed. Backups are private local archives (restricted Windows ACL; not encrypted) under artifacts/deploy/20260930-workflow-parity/backup. Previous image retained as autoclip-go:rollback-20260930-parity; rollback guidance is in that evidence directory's ROLLBACK.md.
+
+Started both services through docker compose up -d --no-build --wait --wait-timeout 180. They are healthy on image sha256:988e07463770f2f6a0d017013418e2bf2516248461443f1d4211eb23071bde3f, still bound to 127.0.0.1:8080. Read-only live verification confirms all 8 projects, 13 drafts and 4 completed exports remain unchanged, task IDs/statuses unchanged with no unexpected production, model/cookie configuration status unchanged, ready legacy plans accessible, all historical exports respond Range 206, and the served frontend is index-Deb8oguS.js with SHA-256 40ce1af1878619e9658981f1d24efa22cb1695096022dfa57a547071eab93763. Evidence: build-verification.json, backup/sha256.json, start.log, deployed-services.txt and live-verification.json in the deployment folder. No model test or paid production request was made; live-model semantic quality acceptance remains open. No source commit or push.

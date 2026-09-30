@@ -227,8 +227,10 @@ func (t *Tools) Render(ctx context.Context, source, outDir, output string, draft
 	if err = draft.Validate(info.Duration); err != nil {
 		return Info{}, fmt.Errorf("render draft: %w", err)
 	}
-	if err = validateCues(cues); err != nil {
-		return Info{}, err
+	if draft.Subtitles {
+		if err = validateCues(cues); err != nil {
+			return Info{}, err
+		}
 	}
 	for _, s := range draft.Scenes {
 		if s.Start >= info.Duration || s.End > info.Duration+.001 {
@@ -250,7 +252,10 @@ func (t *Tools) Render(ctx context.Context, source, outDir, output string, draft
 		return Info{}, err
 	}
 	defer cleanup(dir, &err)
-	timedCues := timelineCues(draft.Scenes, cues)
+	var timedCues []domain.Cue
+	if draft.Subtitles {
+		timedCues = timelineCues(draft.Scenes, cues)
+	}
 	subtitles := draft.Subtitles && len(timedCues) > 0
 	plan := t.planRender(source, info, draft, subtitles)
 	if plan.duration > t.cfg.MaxDuration {
@@ -288,36 +293,45 @@ func (t *Tools) Render(ctx context.Context, source, outDir, output string, draft
 	if err != nil {
 		return Info{}, err
 	}
-	if err = report(progress, "render-validate", percent(99)); err != nil {
+	return t.publishMP4(ctx, dir, outDir, output, plan, "render", progress)
+}
+
+// Shared validation and atomic publication for rendered drafts and clean previews.
+func (t *Tools) publishMP4(ctx context.Context, dir, outDir, output string, plan renderPlan, stage string, progress domain.ProgressFunc) (Info, error) {
+	if err := report(progress, stage+"-validate", percent(99)); err != nil {
 		return Info{}, err
 	}
 	partial := filepath.Join(dir, "partial.mp4")
-	result, err = t.Probe(ctx, partial)
+	result, err := t.Probe(ctx, partial)
 	if err != nil {
-		return Info{}, fmt.Errorf("render output validation: %w", err)
+		return Info{}, fmt.Errorf("%s output validation: %w", stage, err)
 	}
 	if result.Width != plan.width || result.Height != plan.height || result.HasAudio != plan.audio ||
 		math.Abs(result.Duration-plan.duration) > .12 {
-		return Info{}, fmt.Errorf("render output mismatch: got %+v, expected %dx%d %.3fs audio=%t",
-			result, plan.width, plan.height, plan.duration, plan.audio)
+		return Info{}, fmt.Errorf("%s output mismatch: got %+v, expected %dx%d %.3fs audio=%t",
+			stage, result, plan.width, plan.height, plan.duration, plan.audio)
+	}
+	if err = t.validateMP4Encoding(ctx, partial, plan.audio); err != nil {
+		return Info{}, err
 	}
 	f, err := os.OpenFile(partial, os.O_RDWR, 0)
 	if err != nil {
 		return Info{}, err
 	}
 	if err = errors.Join(f.Sync(), f.Close()); err != nil {
-		return Info{}, fmt.Errorf("sync render output: %w", err)
+		return Info{}, fmt.Errorf("sync %s output: %w", stage, err)
 	}
 	if err = ctx.Err(); err != nil {
 		return Info{}, err
 	}
-	if _, err = outputPath(outDir, output); err != nil {
+	target, err := outputPath(outDir, output)
+	if err != nil {
 		return Info{}, err
 	}
 	if err = os.Rename(partial, target); err != nil {
-		return Info{}, fmt.Errorf("publish render output: %w", err)
+		return Info{}, fmt.Errorf("publish %s output: %w", stage, err)
 	}
-	if err = report(progress, "render", percent(100)); err != nil {
+	if err = report(progress, stage, percent(100)); err != nil {
 		return Info{}, errors.Join(err, os.Remove(target))
 	}
 	return result, nil

@@ -1,4 +1,4 @@
-// Package ai implements bounded, non-retrying model requests and analysis.
+// Package ai implements bounded model requests and checkpointed analysis.
 package ai
 
 import (
@@ -14,11 +14,13 @@ const (
 	CodeTimeout         = "timeout"
 	CodeRateLimit       = "rate_limit"
 	CodeInvalidResponse = "invalid_response"
+	CodeNoHighlights    = "no_highlights"
 )
 
 // Error contains only locally authored diagnostics. Neither provider bodies,
 // credentials, prompts, URLs nor underlying network/filesystem errors are exposed.
-// Retryable means an EXPLICIT user retry may help; it never schedules a request.
+// Retryable is informational. Analysis uses its own narrower, single-layer
+// three-attempt policy for network/429/5xx; Complete and smoke never retry.
 type Error struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
@@ -26,6 +28,14 @@ type Error struct {
 	HTTPStatus int    `json:"http_status,omitempty"`
 	Retryable  bool   `json:"retryable"`
 	cause      error
+	// Set only by the transport boundary, never by model output.
+	transientNetwork bool
+	// refineRejected marks a validation failure authored by the visual boundary
+	// review's own decode/validate step. It is the only failure class
+	// AnalyzeVisual may drop and continue past, so cancellation, deadline, auth,
+	// rate-limit, endpoint, checkpoint and progress-callback failures — which
+	// never carry it — still abort the run.
+	refineRejected bool
 }
 
 func (e *Error) Error() string {
@@ -55,6 +65,28 @@ func contextError(ctx context.Context) error {
 		e.Message = "Request deadline exceeded; retry only with explicit consent."
 	}
 	return e
+}
+
+// markRefineRejection tags a provider-output validation failure so the visual
+// pipeline can drop one unusable dense review instead of discarding an already
+// billed analysis. Only invalid_response is tagged: a no-highlights result, a
+// transport/auth/rate-limit failure, a context error and a progress-callback
+// failure all pass through untagged and still abort. nil stays nil.
+func markRefineRejection(err error) error {
+	var e *Error
+	if !errors.As(err, &e) || e.Code != CodeInvalidResponse {
+		return err
+	}
+	tagged := *e
+	tagged.refineRejected = true
+	return &tagged
+}
+
+// rejectedRefinement reports whether err is a tagged refine-output validation
+// failure. atStage copies the concrete *Error, so the tag survives staging.
+func rejectedRefinement(err error) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Code == CodeInvalidResponse && e.refineRejected
 }
 
 func atStage(stage string, err error) error {

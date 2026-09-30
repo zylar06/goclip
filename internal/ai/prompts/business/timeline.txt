@@ -1,0 +1,17 @@
+Adapted from upstream backend/prompt/business/时间点.txt.
+Locate the supplied topics in this exact subtitle chunk.
+
+Cut on semantic boundaries. A clip must keep a figure together with what it
+measures and a judgement together with its stated reasoning — a number quoted
+without its referent misleads. Start where the claim or question is raised, end
+after the conclusion, recommendation or caveat is stated.
+
+Never cut mid-sentence or between a claim and the qualification that limits it.
+Use the provided topic IDs, each at most once. Preserve distinct topics; overlapping
+descriptions of the same discussion may later be merged. Include useful opening
+and closing content. All bounds must quote cue boundaries in source seconds.
+The supplied profile overrides every duration rule written above: keep clips
+between min_seconds and max_seconds where source evidence permits. Do not add
+silence or invent content merely to satisfy a minimum. Prefer adjacent related
+discussion for short fragments. Return only a nonempty JSON array:
+[{"topic_id":"topic-1","start":0.0,"end":30.0}]

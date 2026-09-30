@@ -53,6 +53,18 @@ func fakeTool(mode string, args []string) error {
 		return nil
 	}
 	if hasArg(args, "-show_entries") {
+		if strings.Contains(valueAfter(args, "-show_entries"), "codec_name") {
+			if raw := os.Getenv("AUTOCLIP_MEDIA_CODEC_JSON"); raw != "" {
+				fmt.Print(raw)
+				return nil
+			}
+			codec := "h264"
+			if mode == "bad-codec" {
+				codec = "av1"
+			}
+			fmt.Printf(`{"streams":[{"codec_type":"video","codec_name":%q,"pix_fmt":"yuv420p"},{"codec_type":"audio","codec_name":"aac"}],"format":{"format_name":"mov,mp4,m4a,3gp,3g2,mj2"}}`, codec)
+			return nil
+		}
 		if mode == "bad-probe" {
 			fmt.Print("not JSON")
 			return nil
@@ -60,6 +72,11 @@ func fakeTool(mode string, args []string) error {
 		dur := "1.000"
 		if mode == "nan-probe" {
 			dur = "NaN"
+		}
+		// A duration whose even division yields repeating decimals, so sampling
+		// exercises the millisecond rounding the AI layer's precision requires.
+		if mode == "uneven-duration" {
+			dur = "299.840"
 		}
 		width := 320
 		if mode == "bad-render" && strings.HasSuffix(args[len(args)-1], "partial.mp4") {
@@ -73,6 +90,9 @@ func fakeTool(mode string, args []string) error {
 		return nil
 	}
 	if hasArg(args, "--ignore-config") {
+		if mode == "download-convert-failure" && hasArg(args, "--convert-subs") {
+			return errors.New("platform subtitle conversion failed")
+		}
 		if mode == "filtered-download" {
 			return nil
 		}
@@ -80,7 +100,15 @@ func fakeTool(mode string, args []string) error {
 			fmt.Println(`MEDIA_DOWNLOAD {"downloaded_bytes":99999,"total_bytes":100000}`)
 			return nil
 		}
-		if err := os.WriteFile("source.mp4", []byte("fake video"), 0600); err != nil {
+		video := []byte("fake video")
+		if fixture := os.Getenv("AUTOCLIP_MEDIA_DOWNLOAD_FIXTURE"); fixture != "" {
+			var err error
+			video, err = os.ReadFile(fixture)
+			if err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile("source.mp4", video, 0600); err != nil {
 			return err
 		}
 		fmt.Println(`MEDIA_DOWNLOAD {"downloaded_bytes":5,"total_bytes":10}`)
@@ -88,6 +116,20 @@ func fakeTool(mode string, args []string) error {
 		fmt.Println(`MEDIA_FILE "source.mp4"`)
 		if mode == "download-subtitles" {
 			return os.WriteFile("source.en.srt", []byte("1\n00:00:00,000 --> 00:00:00,500\nHello\n"), 0600)
+		}
+		// Deliberately leave an unsolicited sidecar even when subtitle requests
+		// are disabled: the caller must not inspect unrelated platform tracks.
+		if mode == "download-invalid-subtitles" {
+			return os.WriteFile("source.ai-zh.srt", []byte("invalid unrelated platform SRT"), 0600)
+		}
+		if mode == "download-unreadable-subtitles" {
+			return os.Mkdir("source.ai-zh.srt", 0700)
+		}
+		if mode == "download-oversized-subtitles" {
+			return os.WriteFile("source.ai-zh.srt", bytes.Repeat([]byte("x"), subtitleLimit+1), 0600)
+		}
+		if mode == "download-empty-subtitles" {
+			return os.WriteFile("source.ai-zh.srt", nil, 0600)
 		}
 		return nil
 	}
@@ -114,6 +156,30 @@ func fakeTool(mode string, args []string) error {
 		return errors.New("fake tool: no args")
 	}
 	last := args[len(args)-1]
+	if last == "pipe:1" && hasArg(args, "mjpeg") {
+		switch mode {
+		case "jpeg-wait":
+			time.Sleep(time.Minute)
+			return nil
+		case "jpeg-large":
+			_, err := os.Stdout.Write(bytes.Repeat([]byte("x"), jpegLimit+1))
+			return err
+		case "jpeg-invalid":
+			fmt.Print("not a JPEG")
+			return nil
+		case "jpeg-corrupt":
+			var data bytes.Buffer
+			if err := jpeg.Encode(&data, image.NewRGBA(image.Rect(0, 0, 32, 18)), nil); err != nil {
+				return err
+			}
+			_, err := os.Stdout.Write(data.Bytes()[:data.Len()-20])
+			return err
+		case "jpeg-dimensions":
+			return jpeg.Encode(os.Stdout, image.NewRGBA(image.Rect(0, 0, 641, 18)), nil)
+		default:
+			return jpeg.Encode(os.Stdout, image.NewRGBA(image.Rect(0, 0, 32, 18)), nil)
+		}
+	}
 	if strings.HasSuffix(last, "audio.wav") {
 		sample := int16(1000)
 		if mode == "silence" {
@@ -130,6 +196,13 @@ func fakeTool(mode string, args []string) error {
 		return errors.Join(jpeg.Encode(f, image.NewRGBA(image.Rect(0, 0, 32, 18)), nil), f.Close())
 	}
 	if last == "partial.mp4" {
+		if mode == "preview-wait" {
+			time.Sleep(time.Minute)
+			return nil
+		}
+		if mode == "preview-fail" {
+			return errors.New("simulated encoder failure")
+		}
 		fmt.Println("out_time_us=500000")
 		fmt.Println("out_time_us=1000000")
 		return os.WriteFile(last, []byte("fake rendered video"), 0600)

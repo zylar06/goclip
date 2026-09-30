@@ -11,9 +11,9 @@ Anonymous trusted LAN/VPN users share all projects and cloud costs.
 - `internal/domain`: shared entities and validation.
 - `internal/store`: sole durable state source, settings encryption, task queue.
 - `internal/httpapi`: `/api/v1`, SSE snapshots, same-origin mutation checks.
-- `internal/worker`: import, analyze and immutable-snapshot export orchestration.
+- `internal/worker`: inspect/import, confirmed production and immutable-snapshot export orchestration.
 - `internal/media`: native subprocesses, subtitles, ASR, frame sampling, title PNG and rendering.
-- `internal/ai`: OpenAI-compatible HTTP adapters, six-step text and visual analysis.
+- `internal/ai`: OpenAI-compatible HTTP adapters, semantic text/visual analysis and initial promo proposals.
 - `web`: reused React studio UI with web-only adapter, no analytics or native APIs.
 - Docker image contains FFmpeg, yt-dlp, Deno, whisper.cpp, base model and fonts.
 
@@ -25,13 +25,12 @@ Paths below are relative to `/api/v1`.
 - `GET /projects` -> Project[]; `POST /projects` multipart (video file, optional subtitle, name) or JSON `{name,url}` -> Project
 - `GET /projects/{id}` -> `{project,drafts,tasks,candidates,exports}`
 - `DELETE /projects/{id}` (requires JSON `{confirm:true}`; rejects active tasks)
-- `POST /projects/{id}/analyze` -> Task, body `{mode:"subtitle"|"visual",allow_visual:boolean,confirmed:true,goals:["content"],duration:30,aspect:"original",language:"source",instruction:""}`
+- `POST /projects/{id}/analyze` -> Task, body `{mode:"subtitle"|"visual",allow_visual:boolean,confirmed:true,goals:["content"],duration:30,aspect:"original",instruction:""}`
 - `GET /projects/{id}/source` Range video
 - `GET /projects/{id}/subtitles` -> Cue[]
-- `POST /projects/{id}/drafts` body Draft -> Draft (manual/collection)
+- `POST /projects/{id}/drafts` body Draft -> Draft (manual)
 - `PUT /projects/{id}/drafts/{draftId}` body Draft with current revision -> Draft
-- `POST /projects/{id}/drafts/{draftId}/duplicate` body `{title,language}` -> Draft
-- `POST /projects/{id}/rewrite` body `{draft,instruction}` -> Draft, not saved
+- `POST /projects/{id}/drafts/{draftId}/duplicate` body `{title}` -> Draft
 - `POST /projects/{id}/title-preview` body Draft -> PNG
 - `POST /projects/{id}/drafts/{draftId}/export` body `{revision}` -> Task
 - `GET /projects/{id}/exports/{taskId}/video` Range MP4, `?download=true`
@@ -45,7 +44,7 @@ Paths below are relative to `/api/v1`.
 Project: `{id,name,url?,status,duration,width,height,created_at,updated_at,error?}`.
 Task: `{id,project_id,kind,status,stage,progress:null|number,completed_steps:string[],heartbeat,created_at,updated_at,error?,retryable,payload?}`.
 Task states: queued, running, completed, failed, interrupted, cancelled.
-Kinds: import, analyze, export. Source-ready is distinct from drafts-ready and exported.
+Kinds: import, inspect, analyze, preview, export. Source-ready is distinct from drafts-ready and exported.
 Export: `{task_id,draft_id,revision,title,created_at}`; only completed files are downloadable.
 ModelStatus: `{base_url,model,configured}`; no plaintext credentials are returned.
 Cue: `{start,end,text}`. Candidate: Scene plus `{score,kind}`.
@@ -70,3 +69,51 @@ or images. Runtime UI changes can be superseded at next web startup, and
 all-empty env groups preserve existing settings. No legacy automatic migration
 is implemented; the user's separately authorized local copy is recorded in
 verification.md.
+
+Update: 2026-09-30T11:25:00+08:00 — Source import accepts `b23.tv` share links
+in addition to explicit Bilibili/YouTube video pages. URL validation stays a
+pure function shared by the API and the media layer; a share link is
+shape-checked there and carries a sentinel, and the worker performs the
+single-hop HEAD resolution and revalidates the destination through the same
+rules before fetching. Redirect resolution deliberately does not happen in the
+web process, so the public API gains no caller-driven outbound request. The
+consequence for users is that an unresolvable share link fails inside the import
+task rather than synchronously at paste time. No API or schema change.
+
+Update: 2026-09-30T12:30:00+08:00 — `POST /projects/{id}/analyze` accepts an
+optional `category` field: one of `knowledge`, `speech`, `business`,
+`entertainment`, `opinion`, `experience`, `content_review`, or empty for the
+shared prompts. It selects the genre-specific outline and timeline prompts ported
+from upstream `backend/prompt/<category>/`, with per-stage fallback to the shared
+prompt. An unknown value is rejected at the API boundary before a task is queued.
+`api/openapi.json` and the generated frontend types were regenerated; that
+regeneration also finally removed the `language` fields and the `rewrite` route
+from the published contract, which the earlier feature removal had left stale.
+No database migration: `category` lives only in the analysis task payload.
+
+Update: 2026-09-30T13:00:00+08:00 — Workflow parity implementation separates
+ingestion from production. Import probes and reads provided/platform subtitles
+without starting ASR. A durable project `plan` (revision/options/reason/suggested
+goals) is shown by the independent import review route; ASR is deferred until a
+confirmed text goal or explicit subtitle-enabled export needs it. New drafts
+default to `subtitles:false`; analysis text does not grant subtitle-burning
+consent. Existing draft settings are unchanged unless explicitly edited.
+
+Schema 2 adds workflow records with unique `(project_id,plan_revision)` and
+linked task children. A workflow never holds the global heavy-worker lease.
+Successful content analysis atomically publishes drafts and enqueues immutable
+export snapshots; highlight/promo only do so when `auto_export` was confirmed.
+Per-goal errors and successful results coexist; retry skips already-published
+analysis goals and does not re-render already-completed export tasks.
+
+Added relative API routes: `GET/PUT /projects/{id}/plan`,
+`POST /projects/{id}/confirm` (`plan_revision,confirmed`), `POST
+/projects/{id}/inspect` (`allow_visual,confirmed`), project/draft `thumbnail`,
+`GET/POST /projects/{id}/source-preview`, its `/video` stream, and `POST
+/projects/{id}/drafts/disable-subtitles` (`confirm:true`). Workspace additionally
+returns workflows; tasks optionally carry workflow_id/goal. `AnalysisOptions`
+adds optional burn_subtitles; duration 0 means automatic semantic selection,
+and category is optional in generated contracts. Existing endpoints remain.
+See verification.md for actual executed gates; this entry is not release acceptance.
+
+Update: 2026-09-30T13:21:42.6005111+08:00 — Schema 2 additionally persists workflow-scoped candidate snapshots. Claim leases fence all production worker writes; an OS-owned data-directory execution lock serializes shared media/model checkpoint writers even if a process is suspended beyond its heartbeat. A second worker waits up to 90 seconds (or its context deadline), then reports the lock timeout; the operating system releases ownership when the first worker exits. This preserves checkpoint reuse while preventing overlapping attempt writes. Content drafts use explicit title_enabled:false as well as subtitles:false; a missing title_enabled field retains historical title behavior.

@@ -10,6 +10,12 @@
           "aspect": {
             "type": "string"
           },
+          "burn_subtitles": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string"
+          },
           "confirmed": {
             "type": "boolean"
           },
@@ -25,9 +31,6 @@
           "instruction": {
             "type": "string"
           },
-          "language": {
-            "type": "string"
-          },
           "mode": {
             "type": "string"
           }
@@ -39,7 +42,6 @@
           "goals",
           "duration",
           "aspect",
-          "language",
           "instruction"
         ],
         "type": "object"
@@ -80,6 +82,22 @@
         ],
         "type": "object"
       },
+      "ConfirmProduction": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "type": "boolean"
+          },
+          "plan_revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan_revision",
+          "confirmed"
+        ],
+        "type": "object"
+      },
       "Cue": {
         "additionalProperties": false,
         "properties": {
@@ -109,13 +127,13 @@
           "crop_x": {
             "type": "number"
           },
+          "goal": {
+            "type": "string"
+          },
           "hook": {
             "type": "string"
           },
           "id": {
-            "type": "string"
-          },
-          "language": {
             "type": "string"
           },
           "layout": {
@@ -175,6 +193,16 @@
               }
             ]
           },
+          "title_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "title_motion": {
             "type": "boolean"
           },
@@ -199,7 +227,6 @@
           "title",
           "hook",
           "scenes",
-          "language",
           "aspect",
           "layout",
           "crop_x",
@@ -268,6 +295,55 @@
         ],
         "type": "object"
       },
+      "GoalResult": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "error": {
+            "type": "string"
+          },
+          "export_task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "status",
+          "draft_ids",
+          "export_task_ids"
+        ],
+        "type": "object"
+      },
+      "InspectOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_visual": {
+            "type": "boolean"
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allow_visual",
+          "confirmed"
+        ],
+        "type": "object"
+      },
       "ModelSettings": {
         "additionalProperties": false,
         "properties": {
@@ -308,6 +384,83 @@
         ],
         "type": "object"
       },
+      "PlanUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_export": {
+            "type": "boolean"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AnalysisOptions"
+          },
+          "revision": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "options",
+          "auto_export"
+        ],
+        "type": "object"
+      },
+      "PreviewStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProductionPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_export": {
+            "type": "boolean"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AnalysisOptions"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "suggested_goals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "status",
+          "options",
+          "auto_export",
+          "suggested_goals",
+          "reason"
+        ],
+        "type": "object"
+      },
       "Project": {
         "additionalProperties": false,
         "properties": {
@@ -320,6 +473,16 @@
           "error": {
             "type": "string"
           },
+          "has_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "height": {
             "type": "integer"
           },
@@ -329,7 +492,23 @@
           "name": {
             "type": "string"
           },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
+            "type": "string"
+          },
+          "subtitle_source": {
+            "type": "string"
+          },
+          "subtitle_status": {
             "type": "string"
           },
           "updated_at": {
@@ -400,6 +579,9 @@
           "error": {
             "type": "string"
           },
+          "goal": {
+            "type": "string"
+          },
           "heartbeat": {
             "type": "string"
           },
@@ -407,6 +589,9 @@
             "type": "string"
           },
           "kind": {
+            "type": "string"
+          },
+          "lease_id": {
             "type": "string"
           },
           "payload": {},
@@ -434,6 +619,9 @@
           },
           "updated_at": {
             "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
           }
         },
         "required": [
@@ -449,6 +637,53 @@
           "updated_at",
           "retryable",
           "cancel_requested"
+        ],
+        "type": "object"
+      },
+      "Workflow": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_export": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/GoalResult"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AnalysisOptions"
+          },
+          "plan_revision": {
+            "type": "integer"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "plan_revision",
+          "options",
+          "auto_export",
+          "status",
+          "goals",
+          "created_at",
+          "updated_at"
         ],
         "type": "object"
       },
@@ -478,6 +713,12 @@
           "tasks": {
             "items": {
               "$ref": "#/components/schemas/Task"
+            },
+            "type": "array"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/Workflow"
             },
             "type": "array"
           }
@@ -562,6 +803,10 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "instruction": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -577,7 +822,33 @@
             },
             "multipart/form-data": {
               "schema": {
+                "oneOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "url"
+                      ]
+                    },
+                    "required": [
+                      "video"
+                    ]
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "video"
+                      ]
+                    },
+                    "required": [
+                      "url"
+                    ]
+                  }
+                ],
                 "properties": {
+                  "instruction": {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -585,14 +856,14 @@
                     "format": "binary",
                     "type": "string"
                   },
+                  "url": {
+                    "type": "string"
+                  },
                   "video": {
                     "format": "binary",
                     "type": "string"
                   }
                 },
-                "required": [
-                  "video"
-                ],
                 "type": "object"
               }
             }
@@ -761,6 +1032,53 @@
         }
       }
     },
+    "/projects/{id}/confirm": {
+      "post": {
+        "operationId": "confirmProduction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmProduction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workflow"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
     "/projects/{id}/drafts": {
       "post": {
         "operationId": "createDraft",
@@ -790,6 +1108,62 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Draft"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
+    "/projects/{id}/drafts/disable-subtitles": {
+      "post": {
+        "operationId": "disableSubtitles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "confirm": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "confirm"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
                 }
               }
             },
@@ -889,16 +1263,12 @@
             "application/json": {
               "schema": {
                 "properties": {
-                  "language": {
-                    "type": "string"
-                  },
                   "title": {
                     "type": "string"
                   }
                 },
                 "required": [
-                  "title",
-                  "language"
+                  "title"
                 ],
                 "type": "object"
               }
@@ -994,6 +1364,61 @@
         }
       }
     },
+    "/projects/{id}/drafts/{draftId}/thumbnail": {
+      "get": {
+        "operationId": "draftThumbnail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Stream"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
     "/projects/{id}/exports/{taskId}/video": {
       "get": {
         "operationId": "exportVideo",
@@ -1043,9 +1468,9 @@
         }
       }
     },
-    "/projects/{id}/rewrite": {
+    "/projects/{id}/inspect": {
       "post": {
-        "operationId": "rewriteDraft",
+        "operationId": "inspectSource",
         "parameters": [
           {
             "in": "path",
@@ -1060,19 +1485,89 @@
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "draft": {
-                    "$ref": "#/components/schemas/Draft"
-                  },
-                  "instruction": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "draft",
-                  "instruction"
-                ],
-                "type": "object"
+                "$ref": "#/components/schemas/InspectOptions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
+    "/projects/{id}/plan": {
+      "get": {
+        "operationId": "getPlan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductionPlan"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updatePlan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanUpdate"
               }
             }
           },
@@ -1083,7 +1578,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Draft"
+                  "$ref": "#/components/schemas/ProductionPlan"
                 }
               }
             },
@@ -1105,6 +1600,138 @@
     "/projects/{id}/source": {
       "get": {
         "operationId": "source",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Stream"
+          },
+          "206": {
+            "description": "HTTP Range partial content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
+    "/projects/{id}/source-preview": {
+      "get": {
+        "operationId": "sourcePreviewStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewStatus"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "prepareSourcePreview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "confirmed": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "confirmed"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
+    "/projects/{id}/source-preview/video": {
+      "get": {
+        "operationId": "compatibleSource",
         "parameters": [
           {
             "in": "path",
@@ -1169,6 +1796,44 @@
               }
             },
             "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Explicit error"
+          }
+        }
+      }
+    },
+    "/projects/{id}/thumbnail": {
+      "get": {
+        "operationId": "projectThumbnail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Stream"
           },
           "default": {
             "content": {

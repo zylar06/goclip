@@ -87,6 +87,7 @@
   "Analysis mode": "分析模式",
   "Text / subtitles": "文本 / 字幕分析",
   "Vision / sampled frames": "视觉 / 抽帧分析",
+  "Vision uses sampled images only, not audio or the full transcript. For lectures, interviews, or talking-head videos, use Text / subtitles to find highlights in the spoken content. No highlights may be found from images alone.": "视觉模式仅分析抽样图片，不会接收音频或完整字幕。讲课、访谈、口播等视频如需根据讲解内容找高光，请选择“文本 / 字幕分析”。仅凭画面可能找不到高光。",
   "Target seconds": "目标时长（秒）",
   "Output language": "输出语言",
   "Aspect": "画幅",
@@ -119,7 +120,6 @@
   "Source ready, drafts ready, and exported are separate states. Only completed exports can be downloaded.": "素材就绪、草稿就绪与导出完成是不同状态。只有已完成的导出才能下载。",
   "Draft changed. Previous exports are still available in history.": "草稿已修改，旧导出仍可在导出记录中下载。",
   "No completed exports yet.": "暂无已完成的导出。",
-  "Export an immutable snapshot of this revision. Translation may use the saved text model and incur charges.": "将导出此草稿版本的不可变快照。翻译可能调用已保存的文本模型并产生费用。",
   "Text model": "文本模型",
   "Vision model": "视觉模型",
   "Text model settings": "文本模型设置",
@@ -134,7 +134,6 @@
   "Save vision settings": "保存视觉设置",
   "Test saved text settings": "测试已保存的文本设置",
   "Test saved vision settings": "测试已保存的视觉设置",
-  "Used for subtitle analysis, rewriting, and translation.": "用于字幕分析、文案改写及翻译。",
   "Used only when you explicitly approve sampled image analysis.": "仅在明确同意抽样图片分析后使用。",
   "Leave empty to preserve the saved key": "留空保留已保存的密钥",
   "Enter API key": "请输入 API 密钥",
@@ -169,5 +168,8 @@
   "Latest saved revision loaded.": "已加载最新保存的版本。",
   "A newer saved revision is available. Local edits have not been overwritten.": "服务端已有更新的草稿版本，本地修改尚未被覆盖。",
   "Duplicate the saved version. Existing exports are preserved; no analysis is started.": "复制已保存的版本。保留已有导出，不会启动分析。",
-  "This browser cannot play the source. Timing edits and export remain available; try a browser-compatible MP4 source.": "当前浏览器无法播放此素材。仍可调整时间和导出；建议使用浏览器兼容的 MP4 素材。"
+  "This browser cannot play the source. Timing edits and export remain available; try a browser-compatible MP4 source.": "当前浏览器无法播放此素材。仍可调整时间和导出；建议使用浏览器兼容的 MP4 素材。",
+  "Export an immutable snapshot of this revision.": "导出该版本的固定快照。",
+  "No projects yet": "暂无项目",
+  "Optional Netscape cookies.txt for restricted Bilibili / YouTube imports. Cookies are sensitive and shared by all server users; never upload someone else’s credentials.": "可选的 Netscape cookies.txt，用于受限的 Bilibili / YouTube 导入。Cookie 属于敏感信息，服务器上所有用户共享；请勿上传他人的凭据。"
 }

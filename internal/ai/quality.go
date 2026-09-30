@@ -20,22 +20,16 @@ func textOK(s string, limit int, required bool) bool {
 }
 
 func normalizeOptions(opts domain.AnalysisOptions) (domain.AnalysisOptions, error) {
-	if opts.Duration == 0 {
-		opts.Duration = 30
-	}
 	if opts.Aspect == "" {
 		opts.Aspect = "original"
-	}
-	if opts.Language == "" {
-		opts.Language = "source"
 	}
 	if len(opts.Goals) == 0 {
 		opts.Goals = []string{"content"}
 	}
-	if opts.Duration < 1 || opts.Duration > 1800 || !oneOf(opts.Aspect, "original", "portrait", "landscape") ||
-		!oneOf(opts.Language, "source", "zh", "en", "ja") || !textOK(opts.Instruction, 4000, false) ||
+	if opts.Duration < 0 || opts.Duration > 1800 || !oneOf(opts.Aspect, "original", "portrait", "landscape") ||
+		!textOK(opts.Instruction, 4000, false) || !validCategory(opts.Category) ||
 		!oneOf(opts.Mode, "", "subtitle", "visual") || len(opts.Goals) > 3 {
-		return opts, invalid("Invalid analysis duration, aspect, language, mode or instruction.")
+		return opts, invalid("Invalid analysis duration, aspect, category, mode or instruction.")
 	}
 	seen := map[string]bool{}
 	for _, goal := range opts.Goals {
@@ -79,26 +73,57 @@ func normalizeCues(input []domain.Cue) ([]domain.Cue, float64, error) {
 	return cues, duration, nil
 }
 
-// durationProfile ports upstream pipeline/quality.py, with the requested
-// duration as an additional upper bound and support for genuinely tiny sources.
+// durationProfile keeps tier guidance and treats subtitle duration as advisory.
 type durationProfile struct {
 	Min     float64 `json:"min_seconds"`
 	Target  float64 `json:"target_seconds"`
 	Max     float64 `json:"max_seconds"`
+	HardMax float64 `json:"hard_max_seconds,omitempty"`
 	MinKeep int     `json:"min_keep"`
 	MaxKeep int     `json:"max_keep"`
+	// Tier, TopicsLow/High and Guidance port upstream's prompt_hint, which the
+	// port previously dropped. The model received only the numeric bounds and no
+	// statement that they outrank the prompt body's own figures, so it returned
+	// topic counts and clip lengths that then collided with the strict downstream
+	// checks. Serialized with the profile into the outline and timeline prompts.
+	Tier       string `json:"tier"`
+	TopicsLow  int    `json:"topics_low"`
+	TopicsHigh int    `json:"topics_high"`
+	Guidance   string `json:"guidance"`
 }
 
 func profileFor(duration float64, target int) durationProfile {
-	p := durationProfile{20, 60, 150, 2, 6}
+	p := durationProfile{Min: 20, Target: 60, Max: 150, MinKeep: 2, MaxKeep: 6,
+		Tier: "short", TopicsLow: 3, TopicsHigh: 6}
 	if duration >= 1800 {
-		p = durationProfile{90, 240, 480, 3, 32}
+		hours := math.Max(1, duration/3600)
+		p = durationProfile{Min: 90, Target: 240, Max: 480, MinKeep: 3, MaxKeep: 32,
+			Tier: "long", TopicsLow: int(math.Max(6, 6*hours)), TopicsHigh: int(math.Max(12, 14*hours))}
 	} else if duration >= 480 {
-		p = durationProfile{45, 120, 300, 3, 10}
+		p = durationProfile{Min: 45, Target: 120, Max: 300, MinKeep: 3, MaxKeep: 10,
+			Tier: "medium", TopicsLow: 4, TopicsHigh: 10}
 	}
-	p.Target = math.Min(duration, float64(target))
-	p.Max = math.Min(duration, math.Min(p.Max, float64(target)))
-	p.Min = math.Min(p.Min, p.Max)
+	if target > 0 {
+		p.Target = float64(target)
+		p.Min = math.Min(p.Min, float64(target)/2)
+	}
+	p.Target = math.Min(duration, p.Target)
+	// Preserve upstream tier guidance without mistaking a preferred range or
+	// requested target for a semantic cut point.
+	p.Max = math.Min(duration, p.Max)
+	p.HardMax = math.Min(duration, 1800)
+	p.Min = math.Min(p.Min, p.Max/2)
+	// Ports prompt_hint's priority assertion: without it the model follows the
+	// prompt body's generic figures instead of this source's actual parameters.
+	p.Guidance = fmt.Sprintf("These parameters outrank any duration or count written in the instructions above. "+
+		"Source is %.0f seconds (%s). Extract %d-%d nonoverlapping topics in total. "+
+		"Prefer segments of %.0f-%.0f seconds; target %.0f seconds is advisory. "+
+		"Requested duration zero means automatic complete semantics. Exceed the preferred tier only "+
+		"when needed for a complete semantic unit; never blindly truncate a valid complete passage. "+
+		"The hard maximum is only a safety budget, not a desired length: do not pad toward it. "+
+		"Start and end must fall exactly on subtitle-cue "+
+		"boundaries: quote a cue's own timestamps rather than computing your own.",
+		duration, p.Tier, p.TopicsLow, p.TopicsHigh, p.Min, p.Max, p.Target)
 	return p
 }
 
@@ -111,6 +136,7 @@ type qualityReport struct {
 	Extended int `json:"extended"`
 	Trimmed  int `json:"trimmed"`
 	Dropped  int `json:"dropped"`
+	OverTier int `json:"over_tier"`
 }
 
 type timelineResult struct {
@@ -217,7 +243,27 @@ func boundary(cues []domain.Cue, sec float64, start bool) float64 {
 			return cue.End
 		}
 	}
-	return sec // validation rejects non-cue boundaries, never fabricates evidence.
+	// Upstream quality.py _snap_start/_snap_end always land on a real cue: they
+	// fall back to the first cue reaching past the requested second, then to the
+	// last cue. Returning the raw second instead made cueBoundaries fail and
+	// aborted the whole timeline stage whenever a bound landed in a silent gap
+	// wider than the 3-second window — a long pause, applause or music. The
+	// nearest cue edge is still evidence-grounded; it is never a fabricated time.
+	if len(cues) == 0 {
+		return sec
+	}
+	for _, cue := range cues {
+		if cue.End >= sec {
+			if start {
+				return cue.Start
+			}
+			return cue.End
+		}
+	}
+	if start {
+		return cues[len(cues)-1].Start
+	}
+	return cues[len(cues)-1].End
 }
 
 func cueBoundaries(cues []domain.Cue, start, end float64) bool {
@@ -308,15 +354,8 @@ func refineTimeline(items []domain.Candidate, cues []domain.Cue, p durationProfi
 		if item.End > oldEnd {
 			report.Extended++
 		}
-		if item.End-item.Start > p.Max {
-			end := item.Start
-			for _, cue := range cues {
-				if cue.End > end && cue.End <= item.Start+p.Max && cue.End <= item.End {
-					end = cue.End
-				}
-			}
-			item.End = end
-			report.Trimmed++
+		if item.End-item.Start > timelineHardMax(p) {
+			return timelineResult{}, invalid("A complete timeline span exceeds the hard safety budget; request shorter complete topics instead of blindly cutting speech.")
 		}
 	}
 	var result []domain.Candidate
@@ -353,6 +392,9 @@ func refineTimeline(items []domain.Candidate, cues []domain.Cue, p durationProfi
 		result[i].ID = fmt.Sprintf("text-%d", i+1)
 		result[i].Evidence = excerpt(cues, result[i].Start, result[i].End)
 		result[i].Kind = "text"
+		if result[i].End-result[i].Start > p.Max+1e-6 {
+			report.OverTier++
+		}
 	}
 	report.Output = len(result)
 	if len(result) == 0 {
@@ -365,15 +407,28 @@ func validateTimeline(result timelineResult, cues []domain.Cue, p durationProfil
 	if len(result.Candidates) == 0 || result.Report.Output != len(result.Candidates) {
 		return invalid("Verified timeline is empty or inconsistent.")
 	}
-	end := 0.0
+	end, overTier := 0.0, 0
 	for i, c := range result.Candidates {
 		if c.ID != fmt.Sprintf("text-%d", i+1) || !textOK(c.Label, 120, true) || !finite(c.Start) || !finite(c.End) ||
-			c.Start < end || c.End-c.Start < p.Min-1e-6 || c.End-c.Start > p.Max+1e-6 ||
+			c.Start < end || c.End-c.Start < p.Min-1e-6 || c.End-c.Start > timelineHardMax(p)+1e-6 ||
 			!cueBoundaries(cues, c.Start, c.End) || c.Evidence != excerpt(cues, c.Start, c.End) ||
 			subtitleCoverage(cues, c.Start, c.End) < .5 || c.Kind != "text" || c.Score != 0 {
 			return invalid("Timeline failed subtitle grounding, duration, identity or nonoverlap validation.")
 		}
 		end = c.End
+		if c.End-c.Start > p.Max+1e-6 {
+			overTier++
+		}
+	}
+	if result.Report.OverTier != overTier {
+		return invalid("Timeline over-tier quality report is inconsistent.")
 	}
 	return nil
+}
+
+func timelineHardMax(p durationProfile) float64 {
+	if p.HardMax > 0 {
+		return math.Min(1800, p.HardMax)
+	}
+	return 1800
 }

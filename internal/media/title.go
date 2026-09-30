@@ -268,6 +268,14 @@ func TitlePNG(draft domain.Draft, width, height int) ([]byte, error) {
 // produce deterministic transparent PNGs; previews and exports share these pixels.
 // Presets are native Go designs, not pixel-identical Python template revisions.
 func (t *Tools) TitlePNG(draft domain.Draft, width, height int) (data []byte, err error) {
+	if draft.TitleEnabled != nil && !*draft.TitleEnabled {
+		if width < 1 || height < 1 || width > 4096 || height > 4096 {
+			return nil, errors.New("media: invalid title dimensions")
+		}
+		var b bytes.Buffer
+		err = png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, width, height)))
+		return b.Bytes(), err
+	}
 	if t.cfgErr != nil {
 		return nil, t.cfgErr
 	}

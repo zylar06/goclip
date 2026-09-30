@@ -14,6 +14,9 @@ it('keeps editor/domain refinements assignable to the generated wire contract', 
   expectTypeOf<Web.ModelSettings>().toEqualTypeOf<Generated.ModelSettings>()
   expectTypeOf<Web.Draft>().toMatchTypeOf<Generated.Draft>()
   expectTypeOf<Web.AnalysisOptions>().toMatchTypeOf<Generated.AnalysisOptions>()
+  expectTypeOf<Web.ProductionPlan>().toMatchTypeOf<Generated.ProductionPlan>()
+  expectTypeOf<Web.Workflow>().toMatchTypeOf<Generated.Workflow>()
+  expectTypeOf<Web.PlanOptions>().toMatchTypeOf<Generated.AnalysisOptions>()
   // The only wire relaxations: Go may emit nil slices or omit false cancellation.
   expectTypeOf<Web.Task & { completed_steps: string[]; cancel_requested: boolean }>().toMatchTypeOf<Generated.Task>()
 })

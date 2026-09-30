@@ -252,6 +252,54 @@ func TestIndependentSmokeTests(t *testing.T) {
 	}
 }
 
+func TestVisionSmokeMeetsProviderMinimumImageSize(t *testing.T) {
+	var calls atomic.Int32
+	client, _ := modelServer(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, parts := decodeRequest(t, r)
+		assertImages(t, parts, 1)
+		for _, part := range parts {
+			if part.Type != "image_url" || part.ImageURL == nil {
+				continue
+			}
+			encoded := strings.SplitN(part.ImageURL.URL, ";base64,", 2)
+			if len(encoded) != 2 {
+				t.Error("missing embedded image")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			data, err := base64.StdEncoding.DecodeString(encoded[1])
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			// DashScope rejects the former 8x8 fixture: each side must exceed 10.
+			if cfg.Width <= 10 || cfg.Height <= 10 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"error":{"code":"invalid_parameter_error","message":"image sides must exceed 10"}}`)
+				return
+			}
+			if cfg.Width != 64 || cfg.Height != 64 {
+				t.Errorf("expected bounded 64x64 smoke fixture, got %dx%d", cfg.Width, cfg.Height)
+			}
+		}
+		answer(t, w, "red")
+	})
+	if err := client.Test(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("expected exactly one vision request, got %d", calls.Load())
+	}
+}
+
 func TestCompleteEmbedsImages(t *testing.T) {
 	for _, format := range []string{"png", "jpeg"} {
 		t.Run(format, func(t *testing.T) {
@@ -327,7 +375,6 @@ func TestInvalidResponses(t *testing.T) {
 		"missing_content": `{"choices":[{"message":{}}]}`,
 		"empty_content":   `{"choices":[{"message":{"content":" "}}]}`,
 		"wrong_content":   `{"choices":[{"message":{"content":[]}}]}`,
-		"multiple":        `{"choices":[{"message":{"content":"a"}},{"message":{"content":"b"}}]}`,
 		"truncated":       `{"choices":[{"finish_reason":"length","message":{"content":"secret"}}]}`,
 		"filtered":        `{"choices":[{"finish_reason":"content_filter","message":{"content":"secret"}}]}`,
 		"refusal":         `{"choices":[{"message":{"refusal":"private","content":"secret"}}]}`,
@@ -435,7 +482,7 @@ func TestBadImagesAndPromptsNeverCallProvider(t *testing.T) {
 
 func TestClientConfigurationAndConcurrentUse(t *testing.T) {
 	client, _ := modelServer(t, func(w http.ResponseWriter, r *http.Request) { answer(t, w, "OK") })
-	if client.http.Timeout != requestTimeout {
+	if client.http.Timeout != visionRequestTimeout {
 		t.Fatal("unbounded client")
 	}
 	transport, ok := client.http.Transport.(*http.Transport)
@@ -477,4 +524,88 @@ func TestSmokeWrongAnswerAndInvalidSettings(t *testing.T) {
 	var absent *Client
 	_, err := absent.Complete(context.Background(), "test", nil)
 	assertCode(t, err, CodeModel)
+}
+
+// Live qwen3-vl-plus vision scans of a 300-second source exceeded the former
+// 45-second response-header cap and failed as timeouts after the request had
+// already been billed. Image requests must get a materially longer budget than
+// text ones, and the header cap must not undercut it.
+func TestImageRequestsGetALongerDeadlineThanText(t *testing.T) {
+	client, _ := modelServer(t, func(w http.ResponseWriter, r *http.Request) { answer(t, w, "OK") })
+	transport, ok := client.http.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected a configured transport")
+	}
+	if visionRequestTimeout <= requestTimeout {
+		t.Fatalf("image budget %v must exceed the text budget %v", visionRequestTimeout, requestTimeout)
+	}
+	if transport.ResponseHeaderTimeout < requestTimeout {
+		t.Fatalf("header cap %v undercuts the text request budget %v", transport.ResponseHeaderTimeout, requestTimeout)
+	}
+	if client.http.Timeout < visionRequestTimeout {
+		t.Fatalf("client ceiling %v cuts off image requests early", client.http.Timeout)
+	}
+}
+
+// Upstream intelligence.py indexes choices[0] and ignores extras. Requiring
+// exactly one choice, allowlisting finish reasons, and failing on any non-null
+// `error` key made whole families of OpenAI-compatible gateways unusable here
+// while working in the Python app.
+func TestClientAcceptsCommonCompatibleGatewayShapes(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"extra_choices", `{"choices":[{"message":{"content":"ok"}},{"message":{"content":"ignored"}}]}`},
+		{"empty_error_object", `{"error":{},"choices":[{"message":{"content":"ok"}}]}`},
+		{"null_error", `{"error":null,"choices":[{"message":{"content":"ok"}}]}`},
+		{"finish_eos", `{"choices":[{"finish_reason":"eos","message":{"content":"ok"}}]}`},
+		{"finish_end_turn", `{"choices":[{"finish_reason":"end_turn","message":{"content":"ok"}}]}`},
+		{"finish_uppercase_stop", `{"choices":[{"finish_reason":"STOP","message":{"content":"ok"}}]}`},
+		{"finish_complete", `{"choices":[{"finish_reason":"complete","message":{"content":"ok"}}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, _ := modelServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := w.Write([]byte(tc.body)); err != nil {
+					t.Error(err)
+				}
+			})
+			got, err := client.Complete(context.Background(), "prompt", nil)
+			if err != nil {
+				t.Fatalf("%s must be accepted: %v", tc.name, err)
+			}
+			if got != "ok" {
+				t.Fatalf("expected the first choice's content, got %q", got)
+			}
+		})
+	}
+}
+
+// Tolerance must not swallow a gateway that genuinely reports a failure, nor a
+// finish reason that means the text is incomplete or withheld.
+func TestClientStillRejectsRealErrorsAndIncompleteOutput(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"populated_error", `{"error":{"message":"private"},"choices":[{"message":{"content":"ok"}}]}`},
+		{"truncated", `{"choices":[{"finish_reason":"length","message":{"content":"secret"}}]}`},
+		{"filtered", `{"choices":[{"finish_reason":"content_filter","message":{"content":"secret"}}]}`},
+		{"max_tokens", `{"choices":[{"finish_reason":"max_tokens","message":{"content":"secret"}}]}`},
+		{"tool_calls", `{"choices":[{"finish_reason":"tool_calls","message":{"content":"secret"}}]}`},
+		{"no_choices", `{"choices":[]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, _ := modelServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := w.Write([]byte(tc.body)); err != nil {
+					t.Error(err)
+				}
+			})
+			_, err := client.Complete(context.Background(), "prompt", nil)
+			var e *Error
+			if !errors.As(err, &e) || e.Code != CodeInvalidResponse {
+				t.Fatalf("%s must stay invalid_response, got %v", tc.name, err)
+			}
+			// Provider text must never leak into the error message.
+			if strings.Contains(err.Error(), "private") || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("error leaked provider content: %v", err)
+			}
+		})
+	}
 }

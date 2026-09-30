@@ -9,6 +9,7 @@ import pt from './locales/pt.json'
 import ru from './locales/ru.json'
 import fr from './locales/fr.json'
 import webZh from './web.zh.json'
+import productionZh from './production.zh.json'
 import { resolveLanguage, readPreference, LANGUAGE_STORAGE_KEY, type LanguagePreference } from './language'
 
 export const languages = [
@@ -24,7 +25,7 @@ export { readPreference } from './language'
 let currentPreference: LanguagePreference = readPreference()
 
 void i18n.use(initReactI18next).init({
-  resources: { zh: { translation: { ...zh, ...webZh } }, en: { translation: en }, ja: { translation: ja }, ko: { translation: ko }, es: { translation: es }, pt: { translation: pt }, ru: { translation: ru }, fr: { translation: fr } },
+  resources: { zh: { translation: { ...zh, ...webZh, ...productionZh } }, en: { translation: en }, ja: { translation: ja }, ko: { translation: ko }, es: { translation: es }, pt: { translation: pt }, ru: { translation: ru }, fr: { translation: fr } },
   lng: resolveLanguage(currentPreference, navigator.languages),
   fallbackLng: 'en',
   supportedLngs: languages.map(l => l.value),

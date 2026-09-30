@@ -3,11 +3,12 @@
 export type AnalysisOptions = {
   "allow_visual": boolean;
   "aspect": string;
+  "burn_subtitles"?: boolean;
+  "category"?: string;
   "confirmed": boolean;
   "duration": number;
   "goals": Array<string>;
   "instruction": string;
-  "language": string;
   "mode": string;
 }
 
@@ -21,6 +22,11 @@ export type Candidate = {
   "start": number;
 }
 
+export type ConfirmProduction = {
+  "confirmed": boolean;
+  "plan_revision": number;
+}
+
 export type Cue = {
   "end": number;
   "start": number;
@@ -30,9 +36,9 @@ export type Cue = {
 export type Draft = {
   "aspect": string;
   "crop_x": number;
+  "goal"?: string;
   "hook": string;
   "id": string;
-  "language": string;
   "layout": string;
   "origin": string;
   "original_audio": boolean;
@@ -44,6 +50,7 @@ export type Draft = {
   "subtitles": boolean;
   "title": string;
   "title_accent": (string | null);
+  "title_enabled"?: (boolean | null);
   "title_motion": boolean;
   "title_scale": number;
   "title_style": string;
@@ -67,6 +74,19 @@ export type Export = {
   "title": string;
 }
 
+export type GoalResult = {
+  "draft_ids": Array<string>;
+  "error"?: string;
+  "export_task_ids": Array<string>;
+  "goal": string;
+  "status": string;
+}
+
+export type InspectOptions = {
+  "allow_visual": boolean;
+  "confirmed": boolean;
+}
+
 export type ModelSettings = {
   "api_key": string;
   "base_url": string;
@@ -79,14 +99,38 @@ export type ModelStatus = {
   "model": string;
 }
 
+export type PlanUpdate = {
+  "auto_export": boolean;
+  "options": AnalysisOptions;
+  "revision": number;
+}
+
+export type PreviewStatus = {
+  "status": string;
+  "task"?: (Task | null);
+}
+
+export type ProductionPlan = {
+  "auto_export": boolean;
+  "options": AnalysisOptions;
+  "reason": string;
+  "revision": number;
+  "status": string;
+  "suggested_goals": Array<string>;
+}
+
 export type Project = {
   "created_at": string;
   "duration": number;
   "error"?: string;
+  "has_audio"?: (boolean | null);
   "height": number;
   "id": string;
   "name": string;
+  "plan"?: (ProductionPlan | null);
   "status": string;
+  "subtitle_source"?: string;
+  "subtitle_status"?: string;
   "updated_at": string;
   "url"?: string;
   "width": number;
@@ -105,14 +149,29 @@ export type Task = {
   "completed_steps": Array<string>;
   "created_at": string;
   "error"?: string;
+  "goal"?: string;
   "heartbeat": string;
   "id": string;
   "kind": string;
+  "lease_id"?: string;
   "payload"?: unknown;
   "progress": (number | null);
   "project_id": string;
   "retryable": boolean;
   "stage": string;
+  "status": string;
+  "updated_at": string;
+  "workflow_id"?: string;
+}
+
+export type Workflow = {
+  "auto_export": boolean;
+  "created_at": string;
+  "goals": Array<GoalResult>;
+  "id": string;
+  "options": AnalysisOptions;
+  "plan_revision": number;
+  "project_id": string;
   "status": string;
   "updated_at": string;
 }
@@ -123,4 +182,5 @@ export type Workspace = {
   "exports": Array<Export>;
   "project": Project;
   "tasks": Array<Task>;
+  "workflows"?: Array<Workflow>;
 }

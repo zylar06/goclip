@@ -113,7 +113,10 @@ func TestUploadRevisionAndExportIsolation(t *testing.T) {
 	if e != nil || len(tasks) != 1 {
 		t.Fatal(e)
 	}
-	if _, e = a.Store.Cancel(tasks[0].ID); e != nil {
+	if _, e = a.Store.Claim(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if e = a.Store.Finish(tasks[0].ID, "completed", "", false); e != nil {
 		t.Fatal(e)
 	}
 	project.Duration = 30

@@ -1,5 +1,5 @@
 import type { Candidate, Draft, ProjectDetail, Scene, TaskStatus } from '../../api/contracts'
-export type { Candidate, Draft, Scene, Language } from '../../api/contracts'
+export type { Candidate, Draft, Scene } from '../../api/contracts'
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
 /** View model only; never sent as a backend job. */
 export interface RenderJob {
@@ -7,10 +7,6 @@ export interface RenderJob {
   status: TaskStatus; percent: number | null; error?: string
 }
 export interface Workspace extends Omit<ProjectDetail, 'project'> { project: ProjectDetail['project'] | null; jobs: RenderJob[] }
-export const languages = [
-  { value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' },
-  { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' },
-] as const
 
 // getRandomValues also works on trusted-LAN HTTP, unlike randomUUID.
 export function newID() {
@@ -18,9 +14,9 @@ export function newID() {
 }
 export function newDraft(title: string, scenes: Scene[], origin = 'manual'): Draft {
   return {
-    id: newID(), title, hook: '', scenes, language: 'source', aspect: 'original', layout: 'fit',
+    id: newID(), title, hook: '', scenes, aspect: 'original', layout: 'fit',
     crop_x: .5, title_style: 'plain', title_template_version: 1, title_motion: true,
-    title_scale: 1, title_y: .12, title_accent: null, subtitles: true, original_audio: true,
+    title_scale: 1, title_y: .12, title_accent: null, subtitles: false, original_audio: true,
     revision: 1, origin, updated_at: new Date().toISOString(),
   }
 }
@@ -33,9 +29,9 @@ export function draftError(draft: Draft, sourceDuration?: number): string | null
   if (new Set(draft.scenes.map(s => s.id)).size !== draft.scenes.length) return 'Scene IDs must be unique.'
   if (draft.scenes.some(s => !validID(s.id) || length(s.label) > 120 || length(s.evidence) > 1000 ||
     !Number.isFinite(s.start) || !Number.isFinite(s.end) || s.start < 0 || s.end - s.start < .1)) return 'Each scene must have valid times and last at least 0.1 seconds.'
-  if (sourceDuration !== undefined && draft.scenes.some(s => s.end > sourceDuration + .05)) return 'Scene exceeds source duration.'
+  if (sourceDuration !== undefined && draft.scenes.some(s => s.end > sourceDuration + .001)) return 'Scene exceeds source duration.'
   if (draftDuration(draft) > 1800) return 'A draft cannot exceed 30 minutes.'
-  if (!['source', 'zh', 'en', 'ja'].includes(draft.language) || !['original', 'portrait', 'landscape'].includes(draft.aspect) ||
+  if (!['original', 'portrait', 'landscape'].includes(draft.aspect) ||
     !['fit', 'crop', 'blur'].includes(draft.layout) ||
     !['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'].includes(draft.title_style)) return 'Invalid draft options.'
   if (!Number.isFinite(draft.crop_x) || draft.crop_x < 0 || draft.crop_x > 1 ||
@@ -64,5 +60,3 @@ export function applyCandidate(draft: Draft, candidate: Candidate, target: numbe
 export function portraitDesign(draft: Draft): Draft {
   return { ...draft, aspect: 'portrait', layout: 'crop', title_style: 'comic', title_template_version: 6 }
 }
-/** Rewrite is a suggestion, not permission to replace timing, identity or revision. */
-export const applyRewrite = (draft: Draft, suggestion: Draft): Draft => ({ ...draft, title: suggestion.title, hook: suggestion.hook })

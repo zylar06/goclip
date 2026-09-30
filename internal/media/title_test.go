@@ -118,3 +118,74 @@ func TestTitlePlacementAccentHookAndConcurrentUse(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+func TestExplicitlyDisabledTitleIsTransparentWithoutFonts(t *testing.T) {
+	tools := New(Config{FontDir: filepath.Join(t.TempDir(), "absent-fonts")})
+	for _, style := range domain.Styles {
+		t.Run(style, func(t *testing.T) {
+			d := testDraft()
+			disabled := false
+			d.TitleEnabled, d.TitleStyle = &disabled, style
+			d.Title, d.Hook = "Nonempty metadata title", "Nonempty hook"
+			data, err := tools.TitlePNG(d, 320, 180)
+			if err != nil {
+				t.Fatal("disabled title must not load fonts", err)
+			}
+			img, err := png.Decode(bytes.NewReader(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if img.Bounds().Dx() != 320 || img.Bounds().Dy() != 180 {
+				t.Fatal("transparent title dimensions changed", img.Bounds())
+			}
+			for y := 0; y < 180; y++ {
+				for x := 0; x < 320; x++ {
+					_, _, _, alpha := img.At(x, y).RGBA()
+					if alpha != 0 {
+						t.Fatalf("disabled %s title paints at %d,%d", style, x, y)
+					}
+				}
+			}
+			if d.Title != "Nonempty metadata title" || d.Hook != "Nonempty hook" {
+				t.Fatal("disabling the overlay must not erase metadata")
+			}
+		})
+	}
+}
+
+func TestTitleEnabledNilPreservesLegacyVisibleDefault(t *testing.T) {
+	tools := New(Config{})
+	d := testDraft()
+	d.Title, d.Hook = "Legacy title fallback", ""
+	legacy, err := tools.TitlePNG(d, 320, 180)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	d.TitleEnabled = &enabled
+	explicit, err := tools.TitlePNG(d, 320, 180)
+	if err != nil || !bytes.Equal(legacy, explicit) {
+		t.Fatal("new flag changed legacy nil/default title rendering", err)
+	}
+	img, err := png.Decode(bytes.NewReader(legacy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := 0
+	for y := 0; y < 180; y++ {
+		for x := 0; x < 320; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a != 0 {
+				visible++
+			}
+		}
+	}
+	if visible < 100 {
+		t.Fatal("legacy/explicit enabled title must remain visible", visible)
+	}
+	enabled = false
+	disabled, err := tools.TitlePNG(d, 320, 180)
+	if err != nil || bytes.Equal(legacy, disabled) {
+		t.Fatal("explicit disable did not change the title pixels", err)
+	}
+}

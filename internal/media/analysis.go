@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -151,7 +150,7 @@ func (t *Tools) Transcribe(ctx context.Context, video, outDir string, progress d
 	return cues, nil
 }
 
-// Sample extracts <=24 deterministic JPEGs, at most 640 px wide. duration is the
+// Sample extracts <=60 deterministic JPEGs, at most 640 px per edge. duration is the
 // requested source window starting at zero (0 means the entire video). Each Frame
 // records the actual requested seek time, including for very short videos.
 func (t *Tools) Sample(ctx context.Context, video, outDir string, duration float64, progress domain.ProgressFunc) (frames []domain.Frame, err error) {
@@ -165,10 +164,14 @@ func (t *Tools) Sample(ctx context.Context, video, outDir string, duration float
 	if duration == 0 {
 		duration = info.Duration
 	}
-	if duration > info.Duration+.05 {
+	if duration > info.Duration+.001 {
 		return nil, errors.New("media: sample window exceeds source duration")
 	}
 	duration = min(duration, info.Duration)
+	return t.sampleAt(ctx, video, outDir, overallSampleTimes(duration), progress)
+}
+
+func (t *Tools) sampleAt(ctx context.Context, video, outDir string, times []float64, progress domain.ProgressFunc) (frames []domain.Frame, err error) {
 	video, err = filepath.Abs(video)
 	if err != nil {
 		return nil, err
@@ -183,27 +186,20 @@ func (t *Tools) Sample(ctx context.Context, video, outDir string, duration float
 			cleanup(dir, &err)
 		}
 	}()
-	count := min(24, max(1, int(math.Ceil(duration/10))))
 	if err = report(progress, "sample", percent(0)); err != nil {
 		return nil, err
 	}
-	for i := 0; i < count; i++ {
-		at := float64(i) * duration / float64(count)
+	for i, at := range times {
 		path := filepath.Join(dir, fmt.Sprintf("frame-%03d.jpg", i+1))
-		args := append(ffmpegBase(), "-ss", number(at), "-protocol_whitelist", "file,pipe", "-i", video,
-			"-map", "0:v:0", "-frames:v", "1", "-vf", "scale=w='min(640,iw)':h=-2", "-q:v", "3", "-an", path)
-		if _, err = run(ctx, command{exe: t.cfg.FFmpeg, args: args, dir: dir, timeout: time.Minute}); err != nil {
+		data, e := t.extractJPEG(ctx, video, at)
+		if e != nil {
+			return nil, e
+		}
+		if err = os.WriteFile(path, data, 0600); err != nil {
 			return nil, err
 		}
-		st, e := os.Stat(path)
-		if e != nil {
-			return nil, fmt.Errorf("sample frame missing: %w", e)
-		}
-		if st.Size() == 0 {
-			return nil, errors.New("media: empty sampled frame")
-		}
 		frames = append(frames, domain.Frame{Time: at, Path: path})
-		if err = report(progress, "sample", percent(100*float64(i+1)/float64(count))); err != nil {
+		if err = report(progress, "sample", percent(100*float64(i+1)/float64(len(times)))); err != nil {
 			return nil, err
 		}
 	}
