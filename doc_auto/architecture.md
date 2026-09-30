@@ -117,3 +117,14 @@ and category is optional in generated contracts. Existing endpoints remain.
 See verification.md for actual executed gates; this entry is not release acceptance.
 
 Update: 2026-09-30T13:21:42.6005111+08:00 — Schema 2 additionally persists workflow-scoped candidate snapshots. Claim leases fence all production worker writes; an OS-owned data-directory execution lock serializes shared media/model checkpoint writers even if a process is suspended beyond its heartbeat. A second worker waits up to 90 seconds (or its context deadline), then reports the lock timeout; the operating system releases ownership when the first worker exits. This preserves checkpoint reuse while preventing overlapping attempt writes. Content drafts use explicit title_enabled:false as well as subtitles:false; a missing title_enabled field retains historical title behavior.
+
+Update: 2026-09-30T15:16:00+08:00 — README reorganized into short Chinese
+startup, usage, model setup and maintenance instructions. Removed repeated
+implementation details and historical test/build counts; corrected stale claims
+about import-time transcription, translation and Bilibili short links. A collapsed
+directory tree describes all 226 tracked files individually, including tests,
+prompts, fonts and frontend assets. Private/generated local files are identified
+separately, not listed as tracked source. Tree paths and exact file coverage were
+checked against git ls-files; Markdown fence/disclosure checks and git diff
+--check passed. Documentation-only change: no runtime code, deployment, model
+calls or data changes; application tests were not rerun.
