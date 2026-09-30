@@ -24,6 +24,7 @@ it('uses the deployed route table for upload → independent review → saved re
   })
   const router = createMemoryRouter(appRoutes, { initialEntries: ['/'] })
   render(<RouterProvider router={router} />)
+  await user.click(screen.getByRole('button', { name: 'Import video' }))
   await user.upload(screen.getByLabelText('Video file'), new File(['video'], 'source.mp4', { type: 'video/mp4' }))
   await user.click(screen.getByRole('button', { name: 'Create project' }))
   expect(await screen.findByRole('heading', { name: 'Review imported source' })).toBeInTheDocument()

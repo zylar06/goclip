@@ -11,7 +11,8 @@ export default function App() {
   const [language, setPreference] = useState(readPreference)
   const [error, setError] = useState('')
   return <>
-    <header className="web-header"><div className="web-header-inner"><NavLink to="/" className="web-brand">AutoClip<span>WEB</span></NavLink>
+    <a className="web-skip" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById('main-content')?.focus() }}>{t('Skip to content')}</a>
+    <header className="web-header"><div className="web-header-inner"><NavLink to="/" className="web-brand" translate="no"><svg aria-hidden="true" width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H4v18h4M16 3h4v18h-4M10 8l5 4-5 4" /></svg>GoClip</NavLink>
       <nav aria-label={t('Main navigation')}><NavLink to="/" end>{t('Projects')}</NavLink><NavLink to="/settings">{t('Settings')}</NavLink></nav>
       <label><span className="studio-sr">{t('Interface language')}</span><select aria-label={t('Interface language')} value={language} onChange={async e => {
         const value = e.target.value as LanguagePreference
@@ -19,8 +20,7 @@ export default function App() {
       }}><option value="system">{t('System language')}</option>{languages.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}</select></label>
     </div></header>
     {error && <p role="alert" className="studio-error web-shell-alert">{error}</p>}
-    <div className="web-shell-body"><Outlet /></div>
-    <footer className="web-footer">AutoClip {__APP_VERSION__} · {t('Trusted LAN / VPN only. Shared projects and cloud costs.')}</footer>
+    <div className="web-shell-body" id="main-content" tabIndex={-1}><Outlet /></div>
   </>
 }
 export function RouteError() {

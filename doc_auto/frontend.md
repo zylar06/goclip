@@ -510,3 +510,37 @@ Update: 2026-09-30T13:30:00+08:00 — Final frontend handoff / title toggle regr
   Frontend writes stop after these report/document updates.
 
 Update: 2026-09-30T13:49:08.7123891+08:00 — Closeout fixes the two literal question-mark separators in workflow/goal labels to real middle dots. The existing result-component regression now asserts both labels; browser acceptance also asserts actual DOM separators rather than merely taking a screenshot. Current all-web checks: typecheck/generated API drift check passed; 88 tests across 16 files passed (31.47s); production build passed (2.17s). Logs: artifacts/parity/20260930/frontend-closeout-{typecheck,tests,build}.log. This supersedes the earlier partial title-toggle handoff. See verification.md for final browser evidence and unreleased/real-model boundaries.
+
+Update: 2026-09-30T14:32:00+08:00 — GoClip workbench redesign.
+
+- Replaced the marketing/import-first homepage with a searchable project library
+  and explicit import dialog. Search survives copied URLs. Cancellation clears
+  hidden video/SRT selections and restores focus; busy uploads cannot be dismissed.
+- Removed repeated source/draft/export statistics and empty task/export sections.
+  Clips lead the project page; completed tasks, old exports, workflow history,
+  technical stages and source ranges are disclosures. Failures/active tasks remain
+  visible. Project deletion and batch subtitle changes retain explicit dialogs.
+- Confirmed plans now show a compact receipt and explicit new-round action, not
+  an inactive wall of configuration. Unknown confirmations still use saved-revision
+  replay; new rounds require fresh cost/image consent.
+- Widened editor preview, collapsed title templates, added responsive review/model
+  layouts, neutral/slate theme, compact controls, GoClip identity/favicon and a
+  keyboard skip link. Removed the repeated footer; installation/shared-cost
+  boundary remains in settings. No external UI/font dependencies were added.
+- Updated full-workflow browser entry for the import dialog. Added permanent
+  `workbench.test.tsx` behavioral coverage and `theme.test.ts` contrast checks.
+  Existing import, consent, conflict/recovery, playback and export tests remain.
+- Final web gate: **98/98 tests, 18 files, 37.31 seconds**; API drift/typecheck
+  passed; production build passed (2.05 seconds), `index-BXDI7hbi.js` /
+  `index-BIcEll7i.css`. Logs: `artifacts/frontend-redesign/{tests,typecheck,build}.log`.
+  Five existing browser-harness tests also passed.
+- Read-only Chrome review exercised 14 desktop/mobile/dark screenshots with real
+  source media, explicit image/video readiness, overflow and Escape focus checks.
+  Evidence `artifacts/frontend-redesign/browser-QSxRH9/summary.json` has zero
+  writes and zero API/runtime errors. This screenshot run preceded only the final
+  decorative plus-text → inline-icon change; final workflow validation is recorded
+  separately in verification.md.
+- Design/research, source skills and reproducible browser commands:
+  `frontend-workbench.md`. This entry supersedes the old warm-stone/hero/card-grid
+  styling description, not historical tests or backend contracts.
+- No backend, production data, Docker image, deployment, commit or push changed.

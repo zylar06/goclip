@@ -267,6 +267,8 @@ export async function run() {
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `if(location.protocol==='http:')localStorage.setItem('autoclip.language','en')` })
     await cdp.send('Page.navigate', { url: base + '/' })
     stage = 'browser-upload'
+    await probe('home import action', () => cdp.evaluate(`!!document.querySelector('.web-page-heading button')`))
+    await click('Import video')
     await probe('home controls', () => cdp.evaluate(`!!document.querySelector('input[type=file]')`))
     const doc = await cdp.send('DOM.getDocument')
     const files = await cdp.send('DOM.querySelectorAll', { nodeId: doc.root.nodeId, selector: 'input[type=file]' })

@@ -1,43 +1,42 @@
 /* =============================================================================
    AutoClip · design tokens
-   Layout concept: a calm stone control desk — one quiet canvas, hairline-ruled
-   sections, and a single loud element (the render meter) that you can read from
-   across the room while a clip is being cut.
+   Editing workbench: neutral surfaces, compact controls, video-first hierarchy.
+   Color communicates actions and task state, never decoration.
 
    Every token is declared here on bare :root (light). The two dark blocks below
    only REDEFINE tokens, so a component rule never has to know which theme is on.
    ========================================================================== */
 :root{
   /* --- surfaces: canvas → sunken → card → raised ------------------------- */
-  --ac-bg:#F7F5F1;
-  --ac-sunken:#EFEBE4;
+  --ac-bg:#F6F7F9;
+  --ac-sunken:#ECEFF3;
   --ac-card:#FFFFFF;
   --ac-raised:#FFFFFF;
-  --ac-thumb:#EFEBE4;
+  --ac-thumb:#ECEFF3;
 
   /* --- ink: 4.5:1+ on bg, sunken and card in both themes ----------------- */
-  --ac-ink:#1A1917;
-  --ac-sub:#5C574F;
-  --ac-muted:#6E6960;
+  --ac-ink:#202631;
+  --ac-sub:#505C6B;
+  --ac-muted:#606C7A;
 
   /* --- hairlines --------------------------------------------------------- */
-  --ac-line:#E4DFD6;
-  --ac-line-2:#EDE9E2;
-  --ac-line-strong:#D5CFC3;
+  --ac-line:#DCE1E7;
+  --ac-line-2:#E9ECF0;
+  --ac-line-strong:#AAB4C0;
 
   /* --- one accent hue; semantic colors are separate and reserved --------- */
-  --ac-accent:#2551CE;
-  --ac-accent-strong:#1E43AF;
-  --ac-accent-soft:#EAEEFB;
-  --ac-accent-ring:rgba(37,81,206,.28);
+  --ac-accent:#245BC4;
+  --ac-accent-strong:#184AA9;
+  --ac-accent-soft:#EBF1FD;
+  --ac-accent-ring:rgba(36,91,196,.24);
 
   --ac-ok:#1B7040;        --ac-ok-soft:#E8F3EB;
   --ac-warn:#8A5A0A;      --ac-warn-soft:#FBF1DE;
   --ac-error:#BE3527;     --ac-error-soft:#FBEAE7;
 
   /* --- inverted call-to-action ------------------------------------------ */
-  --ac-cta-bg:#1A1917;
-  --ac-cta-bg-hover:#332F2A;
+  --ac-cta-bg:#245BC4;
+  --ac-cta-bg-hover:#184AA9;
   --ac-cta-fg:#FFFFFF;
 
   /* --- overlays (theme-independent by design: they sit on video) -------- */
@@ -51,9 +50,9 @@
   --ac-font-serif:Georgia,"Songti SC","Noto Serif SC","Times New Roman",serif;
   --ac-font-mono:ui-monospace,SFMono-Regular,"SF Mono","Cascadia Mono",Consolas,"Liberation Mono",Menlo,"Noto Sans Mono",monospace;
 
-  --ac-t-xs:11.5px;
-  --ac-t-sm:12.5px;
-  --ac-t-base:13.5px;
+  --ac-t-xs:12px;
+  --ac-t-sm:13px;
+  --ac-t-base:14px;
   --ac-t-md:15px;
   --ac-t-lg:17px;
   --ac-t-xl:21px;
@@ -65,11 +64,11 @@
   --ac-s-12:48px; --ac-s-14:56px;
 
   /* --- radius ------------------------------------------------------------ */
-  --ac-r-sm:8px; --ac-r-md:12px; --ac-r-lg:16px; --ac-r-xl:20px; --ac-r-pill:999px;
+  --ac-r-sm:4px; --ac-r-md:6px; --ac-r-lg:8px; --ac-r-xl:10px; --ac-r-pill:5px;
 
   /* --- elevation --------------------------------------------------------- */
-  --ac-shadow:0 1px 2px rgba(26,25,23,.04), 0 8px 24px rgba(26,25,23,.05);
-  --ac-shadow-sm:0 1px 2px rgba(26,25,23,.07);
+  --ac-shadow:none;
+  --ac-shadow-sm:none;
   --ac-shadow-lg:0 2px 6px rgba(26,25,23,.06), 0 18px 48px rgba(26,25,23,.12);
 
   /* --- motion ------------------------------------------------------------ */
@@ -79,7 +78,7 @@
   --ac-t-long:400ms;
 
   /* --- page gutter: never below 16px ------------------------------------ */
-  --ac-gutter:clamp(16px, 4vw, 56px);
+  --ac-gutter:clamp(16px, 3vw, 40px);
   color-scheme:light;
 }
 
@@ -87,19 +86,19 @@
    data-theme="dark" choice resolve to exactly the same palette. */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --ac-bg:#151413;
-    --ac-sunken:#272422;
-    --ac-card:#1E1C1A;
-    --ac-raised:#26231F;
-    --ac-thumb:#272422;
+    --ac-bg:#171B22;
+    --ac-sunken:#282F39;
+    --ac-card:#20262F;
+    --ac-raised:#282F39;
+    --ac-thumb:#282F39;
 
-    --ac-ink:#EDEAE4;
-    --ac-sub:#A9A399;
-    --ac-muted:#938D83;
+    --ac-ink:#E8EDF4;
+    --ac-sub:#AFB9C7;
+    --ac-muted:#A2ADBD;
 
-    --ac-line:#35322E;
-    --ac-line-2:#282521;
-    --ac-line-strong:#494440;
+    --ac-line:#38424F;
+    --ac-line-2:#2B333E;
+    --ac-line-strong:#566274;
 
     --ac-accent:#93ACFF;
     --ac-accent-strong:#AEC0FF;
@@ -110,32 +109,32 @@
     --ac-warn:#DFAC4E;     --ac-warn-soft:#26200F;
     --ac-error:#F28477;    --ac-error-soft:#2A1917;
 
-    --ac-cta-bg:#EDEAE4;
+    --ac-cta-bg:#E8EDF4;
     --ac-cta-bg-hover:#FFFFFF;
-    --ac-cta-fg:#151413;
+    --ac-cta-fg:#171B22;
 
     --ac-scrim:rgba(0,0,0,.6);
 
-    --ac-shadow:0 1px 2px rgba(0,0,0,.34), 0 8px 24px rgba(0,0,0,.4);
-    --ac-shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --ac-shadow:none;
+    --ac-shadow-sm:none;
     --ac-shadow-lg:0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.56);
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --ac-bg:#151413;
-  --ac-sunken:#272422;
-  --ac-card:#1E1C1A;
-  --ac-raised:#26231F;
-  --ac-thumb:#272422;
+  --ac-bg:#171B22;
+  --ac-sunken:#282F39;
+  --ac-card:#20262F;
+  --ac-raised:#282F39;
+  --ac-thumb:#282F39;
 
-  --ac-ink:#EDEAE4;
-  --ac-sub:#A9A399;
-  --ac-muted:#938D83;
+  --ac-ink:#E8EDF4;
+  --ac-sub:#AFB9C7;
+  --ac-muted:#A2ADBD;
 
-  --ac-line:#35322E;
-  --ac-line-2:#282521;
-  --ac-line-strong:#494440;
+  --ac-line:#38424F;
+  --ac-line-2:#2B333E;
+  --ac-line-strong:#566274;
 
   --ac-accent:#93ACFF;
   --ac-accent-strong:#AEC0FF;
@@ -146,14 +145,14 @@
   --ac-warn:#DFAC4E;     --ac-warn-soft:#26200F;
   --ac-error:#F28477;    --ac-error-soft:#2A1917;
 
-  --ac-cta-bg:#EDEAE4;
+  --ac-cta-bg:#E8EDF4;
   --ac-cta-bg-hover:#FFFFFF;
-  --ac-cta-fg:#151413;
+  --ac-cta-fg:#171B22;
 
   --ac-scrim:rgba(0,0,0,.6);
 
-  --ac-shadow:0 1px 2px rgba(0,0,0,.34), 0 8px 24px rgba(0,0,0,.4);
-  --ac-shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --ac-shadow:none;
+  --ac-shadow-sm:none;
   --ac-shadow-lg:0 2px 6px rgba(0,0,0,.4), 0 18px 48px rgba(0,0,0,.56);
   color-scheme:dark;
 }

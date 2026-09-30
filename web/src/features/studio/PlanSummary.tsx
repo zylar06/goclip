@@ -96,9 +96,18 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
       onChanged()
     } catch (cause) { setError(errorText(cause)); onChanged() } finally { saving.current = false; setBusy(false) }
   }
-  return <Section title={t('Production plan')} description={t('Import only inspects local media. No ASR or cloud production starts until confirmation.')}>
+  if (plan?.status === 'confirmed' && !newRound && pendingRevision === null) return <Section title={t('Production plan')}>
+    <p role="status">{t(active ? 'Production is in progress. Saved choices are retained; follow the tasks below.'
+      : 'This plan was already confirmed. Check its production results or explicitly prepare another round.')}</p>
+    <p className="studio-muted">{options.goals.map(goal => t(goal)).join(' / ')}</p>
+    <Btn disabled={active || busy || loading} onClick={() => { setNewRound(true); setPaid(false); setImages(false); setNotice('') }}>{t('Prepare another production round')}</Btn>
+    {error && <p role="alert" className="studio-error">{error}</p>}
+  </Section>
+  return <Section title={t('Production plan')}>
+    <details className="studio-details web-plan-evidence"><summary>{t('Local evidence')}</summary>
     <p>{t('Local evidence')}: {plan?.reason || t('Loading plan…')}</p>
     <p className="studio-muted">{t('Subtitle source')}: {t(project.subtitle_source || 'Unknown')} · {t(project.subtitle_status || 'Unknown')}</p>
+    </details>
     <p className="web-note">{t(mixed ? 'Content uses subtitles even in a mixed visual plan. Missing subtitles will be transcribed only after confirmation.'
       : options.mode === 'visual' ? 'Visual mode does not require transcription. Images do not reveal speech.'
       : project.subtitle_status === 'available' ? 'Existing subtitles will be used; transcription is not needed.'
@@ -106,12 +115,11 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
           : 'Transcription is needed if usable subtitles are absent; it starts only after confirmation.')}</p>
     {active && <p role="status">{t('Production is in progress. Saved choices are retained; follow the tasks below.')}</p>}
     {pendingRevision !== null && <p role="status">{t('Confirmation outcome is unknown. Reconfirm only this saved revision; no new production round will be created.')}</p>}
-    {plan?.status === 'confirmed' && !newRound && pendingRevision === null && <p role="status">{t('This plan was already confirmed. Check its production results or explicitly prepare another round.')}</p>}
     <fieldset className="studio-fieldset" disabled={busy || active || loading || !plan}>
       <fieldset className="studio-fieldset" disabled={locked}>
       <div className="studio-actions" role="group" aria-label={t('Goals')}>{(['content', 'highlight', 'promo'] as const).map(goal =>
         <label key={goal}><input type="checkbox" checked={options.goals.includes(goal)} onChange={e => patch({ goals: e.target.checked ? [...options.goals, goal] : options.goals.filter(g => g !== goal) })} />{t(goal)} {plan?.suggested_goals?.includes(goal) && <small>{t('Suggested')}</small>}</label>)}</div>
-      <div className="studio-fields">
+      <div className="studio-fields web-plan-fields">
         <label className="studio-field">{t('Analysis mode')}<select value={options.mode} onChange={e => { patch({ mode: e.target.value as PlanOptions['mode'] }); setImages(false) }}><option value="subtitle">{t('Text / subtitles')}</option><option value="visual">{t('Vision / sampled frames')}</option></select></label>
         <label className="studio-field">{t('Target seconds (0 = automatic)')}<input type="number" min={0} max={120} step={1} value={options.duration} onChange={e => patch({ duration: Number(e.target.value) })} /></label>
         <label className="studio-field">{t('Aspect')}<select value={options.aspect} onChange={e => patch({ aspect: e.target.value as PlanOptions['aspect'] })}><option value="original">{t('Original')}</option><option value="portrait">9:16</option><option value="landscape">16:9</option></select></label>
@@ -130,7 +138,6 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
         : options.mode === 'visual' ? 'Vision uses sampled images only, not audio or the full transcript. For lectures, interviews, or talking-head videos, use Text / subtitles to find highlights in the spoken content. No highlights may be found from images alone.' : 'Subtitle text may be sent to the saved text model. No video images will be sent.')}</p>
       <label className="web-consent"><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} />{t('I understand and approve possible additional charges.')}</label>
       <div className="studio-actions"><Btn disabled={!valid || stale || locked} onClick={() => save(false)}>{t('Save plan only')}</Btn><Btn variant="cta" disabled={!valid || stale || !consent || (locked && pendingRevision === null)} onClick={() => save(true)}>{t(pendingRevision !== null ? 'Reconfirm saved revision' : 'Confirm and start production')}</Btn>
-        {plan?.status === 'confirmed' && !newRound && pendingRevision === null && <Btn onClick={() => { setNewRound(true); setPaid(false); setImages(false); setNotice('') }}>{t('Prepare another production round')}</Btn>}
       </div>
     </fieldset>
     <p className="studio-muted">{t('模型失败不删除原素材或已有成片。瞬时网络或服务错误最多尝试三次，可能产生额外费用；鉴权、配置和响应结构错误不自动重试。')}</p>

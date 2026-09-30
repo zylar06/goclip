@@ -127,12 +127,12 @@ p.studio-error[role="alert"]::before{
 }
 .studio-editor-head .ac-title{margin-top:0}
 .studio-editor-head>div:first-child{min-width:0;display:flex;flex-direction:column;gap:var(--ac-s-2)}
-.studio-editor-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:var(--ac-s-6)}
+.studio-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:var(--ac-s-6);align-items:start}
 
 /* ------------------------------------------------------------------ stage --- */
 .studio-stage{
-  padding:var(--ac-s-5);background:var(--ac-sunken);border:1px solid var(--ac-line);
-  border-radius:var(--ac-r-lg);display:flex;justify-content:center;align-items:center;min-height:340px;
+  padding:var(--ac-s-3);background:var(--ac-video-bed);border:1px solid var(--ac-line);
+  border-radius:var(--ac-r-md);display:flex;justify-content:center;align-items:center;min-height:340px;
 }
 .studio-video-frame{
   container-type:inline-size;width:100%;position:relative;

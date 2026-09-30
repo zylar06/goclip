@@ -6,11 +6,11 @@
 
 /* ------------------------------------------------------------ page shell --- */
 .ac-page{
-  width:100%;max-width:1200px;margin:0 auto;flex:1;
+  width:100%;max-width:1360px;margin:0 auto;flex:1;
   padding-left:var(--ac-gutter);padding-right:var(--ac-gutter);
   padding-block:var(--ac-s-8) var(--ac-s-14);
 }
-.ac-page--narrow{max-width:920px}
+.ac-page--narrow{max-width:1080px}
 
 /* -------------------------------------------- page header: back · title --- */
 .ac-back{
@@ -276,7 +276,7 @@ a.ac-btn{text-decoration:none}
   width:min(560px,100%);max-height:calc(100dvh - 48px);overflow:auto;
   background:var(--ac-card);border:1px solid var(--ac-line);border-radius:var(--ac-r-xl);
   box-shadow:var(--ac-shadow-lg);padding:var(--ac-s-6);
-  animation:ac-rise var(--ac-t-short) var(--ac-ease-out);scrollbar-width:thin;
+    animation:ac-rise var(--ac-t-short) var(--ac-ease-out);scrollbar-width:thin;overscroll-behavior:contain;
 }
 .ac-dialog h3{margin:0;font-size:var(--ac-t-lg);font-weight:650;letter-spacing:-.01em;color:var(--ac-ink);line-height:1.35}
 .ac-dialog p{margin:var(--ac-s-2) 0 0;font-size:var(--ac-t-base);color:var(--ac-sub);line-height:1.6}

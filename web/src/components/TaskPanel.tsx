@@ -25,9 +25,9 @@ export default function TaskPanel({ tasks, connections = {}, onRefresh }: {
     } catch (cause) { setError(errorText(cause)) }
     finally { setBusy(false) }
   }
-  return <Section title={t('Tasks')} count={tasks.length} right={<Btn size="sm" onClick={onRefresh}>{t('Refresh / reconnect')}</Btn>}>
-    {!tasks.length && <p className="ac-empty"><b>{t('暂无任务')}</b>{t('No tasks yet.')}</p>}
-    {tasks.map(task => {
+  const history = tasks.filter(task => task.status === 'completed')
+  const current = tasks.filter(task => task.status !== 'completed')
+  const renderTask = (task: Task) => {
       const running = !terminal(task)
       const failed = ['failed', 'interrupted'].includes(task.status)
       const tone = task.status === 'completed' ? 'ok' : failed ? 'error'
@@ -39,9 +39,11 @@ export default function TaskPanel({ tasks, connections = {}, onRefresh }: {
           <span className={`ac-mono web-task-percent${task.progress === null ? ' web-task-percent--idle' : ''}`}>{task.progress === null ? t('Progress unavailable') : `${task.progress}%`}</span>
         </div>
         {running && <ProgressLine percent={task.progress} large />}
+        <details className="web-task-diagnostics"><summary>{t('Task details')}</summary>
         <p className="web-task-stage">{t('Stage')}: {task.stage || '—'}</p>
         {!!task.completed_steps?.length && <p className="web-task-steps">{t('Completed steps')}: {task.completed_steps.join(' → ')}</p>}
         <p className="web-task-facts"><span>{t('Heartbeat')}: {task.heartbeat || '—'}{connections[task.id] && !terminal(task) && ` · ${t(connections[task.id].state)}`}</span></p>
+        </details>
         {!terminal(task) && task.heartbeat && Date.now() - Date.parse(task.heartbeat) > 120000 &&
           <p role="status" className="web-warning">{t('Worker heartbeat is stale. Check server health; no automatic retry will be sent.')}</p>}
         {connections[task.id]?.message && !terminal(task) && <p className="web-warning" role="status">{t(connections[task.id].message)}</p>}
@@ -55,7 +57,12 @@ export default function TaskPanel({ tasks, connections = {}, onRefresh }: {
             <Btn size="sm" disabled={busy} onClick={() => { setError(''); setConsent(false); setAction({ task, kind: 'retry' }) }}>{t('Retry task…')}</Btn>}
         </div>
       </article>
-    })}
+    }
+  if (!tasks.length) return null
+  if (!current.length) return <details className="studio-details web-task-history"><summary>{t('Completed tasks')} ({history.length})</summary>{history.map(renderTask)}</details>
+  return <Section title={t('Tasks')} count={tasks.length} right={<Btn size="sm" onClick={onRefresh}>{t('Refresh / reconnect')}</Btn>}>
+    {current.map(renderTask)}
+    {!!history.length && <details className="studio-details web-task-history"><summary>{t('Completed tasks')} ({history.length})</summary>{history.map(renderTask)}</details>}
     {notice && <p role="status" className="web-note">{t(notice)}</p>}
     <Dialog open={!!action} onClose={() => !busy && setAction(null)} title={t(importRetry ? 'Confirm import retry' : action?.kind === 'retry' ? 'Confirm paid retry' : 'Cancel this task?')}
       description={t(importRetry ? 'Retry resumes source import and subtitle inspection only. It does not authorize transcription or cloud production. No retry happens automatically.'

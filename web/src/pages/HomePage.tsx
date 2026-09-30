@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, errorText } from '../api/client'
 import type { Project } from '../api/contracts'
-import { Btn, Section, fmtDuration } from '../ui'
+import { Btn, Dialog, Icon, fmtDuration } from '../ui'
 
 export function validateSourceURL(value: string): string {
   const invalid = () => new Error('Use an HTTPS Bilibili or YouTube video-page link, or a b23.tv share link, without credentials or ports. Playlist pages are unsupported.')
@@ -35,6 +35,9 @@ export function validateSourceURL(value: string): string {
 export default function HomePage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [search, setSearch] = useSearchParams()
+  const query = search.get('q') || ''
+  const [importing, setImporting] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -47,6 +50,10 @@ export default function HomePage() {
   const [instruction, setInstruction] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const closeImport = () => {
+    if (busy) return
+    setImporting(false); setVideo(null); setSRT(null); setError('')
+  }
   const changeMode = (next: 'file' | 'url') => {
     if (mode === next) return
     // File inputs remount between modes; do not upload a now-invisible old file.
@@ -84,33 +91,53 @@ export default function HomePage() {
     } catch (cause) { setError(errorText(cause)) }
     finally { setBusy(false) }
   }
-  return <main className="ac-page">
-    <header className="web-hero"><span className="ac-eyebrow">AUTOCLIP · WEB</span><h1>{t('Your source. Your edit.')}</h1><p>{t('Import a video, choose what to make, and refine every scene.')}</p></header>
-    <form className="studio-import-box" onSubmit={create} noValidate>
+  const visible = [...projects].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    .filter(project => project.name.toLocaleLowerCase().includes(query.toLocaleLowerCase().trim()))
+  return <main className="ac-page web-library">
+    <header className="web-page-heading"><div><h1 className="ac-title">{t('Projects')}</h1>
+      <p className="ac-sub">{t('Pick up an edit or import a video.')}</p></div>
+      <Btn variant="cta" onClick={() => setImporting(true)}><Icon.Plus />{t('Import video')}</Btn>
+    </header>
+    <div className="web-library-toolbar">
+      <label className="web-search"><span className="studio-sr">{t('Search projects')}</span>
+        <input type="search" name="q" autoComplete="off" placeholder={t('Search projects…')} value={query} onChange={e => {
+          const next = new URLSearchParams(search)
+          if (e.target.value) next.set('q', e.target.value); else next.delete('q')
+          setSearch(next, { replace: true })
+        }} /></label>
+      <span className="studio-muted" role="status">{t('{{count}} projects', { count: visible.length })}</span>
+      <Btn size="sm" onClick={() => setVersion(v => v + 1)}>{t('Refresh')}</Btn>
+    </div>
+    {loading && <div className="ac-loading" role="status" aria-label={t('Loading projects…')}><span className="studio-sr">{t('Loading projects…')}</span>
+      <div className="ac-skeleton" /><div className="ac-skeleton" /><div className="ac-skeleton" /></div>}
+    {loadError && <p className="studio-error" role="alert">{loadError}</p>}
+    {!loading && !loadError && !projects.length && <div className="ac-empty"><b>{t('No projects yet')}</b><p>{t('Import a video to start your first edit.')}</p></div>}
+    {!loading && !loadError && projects.length > 0 && !visible.length && <p className="ac-empty">{t('No matching projects. Try another name.')}</p>}
+    {visible.length > 0 && <div className="web-project-list">
+      <div className="web-project-columns" aria-hidden="true"><span>{t('Project')}</span><span>{t('Status')}</span><span>{t('Duration')}</span><span>{t('Updated')}</span></div>
+      {visible.map(project => <Link className="web-project-row" key={project.id} to={`/project/${project.id}`}>
+        <div className="web-project-name"><span className="web-media-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3V9Z" /></svg></span>
+          <div><h2>{project.name}</h2><small>{project.error ? t('Open project for error details.') : project.width > 0 && project.height > 0 ? `${project.width} × ${project.height}` : t('Inspecting source…')}</small></div></div>
+        <span className={`web-project-status${project.error ? ' web-project-status--error' : ''}`}>{t(project.status)}</span>
+        <span className="web-project-duration">{project.duration > 0 ? fmtDuration(project.duration) : '—'}</span>
+        <time dateTime={project.updated_at}>{new Date(project.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</time>
+      </Link>)}
+    </div>}
+    <Dialog open={importing} title={t('Import video')} onClose={closeImport}>
+    <form className="web-import-form" onSubmit={create} noValidate>
       <fieldset disabled={busy} className="studio-fieldset">
         <div className="studio-actions studio-mode-switch"><Btn aria-pressed={mode === 'file'} onClick={() => changeMode('file')}>{t('Upload video + SRT')}</Btn><Btn aria-pressed={mode === 'url'} onClick={() => changeMode('url')}>{t('Bilibili / YouTube URL')}</Btn></div>
-        <label className="studio-field">{t('Project name (optional)')}<input maxLength={200} value={name} onChange={e => setName(e.target.value)} /></label>
-        {mode === 'file' ? <div className="studio-fields studio-fields--2">
-          <label className="studio-field">{t('Video file')}<input type="file" accept=".mp4,.mkv,.mov,.webm,.avi,.m4v,.flv,.ts" required onChange={e => setVideo(e.target.files?.[0] ?? null)} /></label>
-        </div> : <label className="studio-field">{t('Video URL')}<input type="url" required placeholder="https://…" value={url} onChange={e => setURL(e.target.value)} /></label>}
+        {mode === 'file' ? <label className="studio-field web-file-picker">{t('Video file')}<input name="video" type="file" accept=".mp4,.mkv,.mov,.webm,.avi,.m4v,.flv,.ts" required onChange={e => setVideo(e.target.files?.[0] ?? null)} /></label>
+          : <label className="studio-field">{t('Video URL')}<input name="url" autoComplete="off" spellCheck={false} type="url" required placeholder="https://…" value={url} onChange={e => setURL(e.target.value)} /></label>}
+        <label className="studio-field">{t('Project name (optional)')}<input name="name" autoComplete="off" maxLength={200} value={name} onChange={e => setName(e.target.value)} /></label>
         <label className="studio-field">{t('SRT subtitles (optional)')}<input key={mode} type="file" accept=".srt" onChange={e => setSRT(e.target.files?.[0] ?? null)} /></label>
         <details className="studio-details"><summary>{t('Special requirements (optional)')}</summary><label className="studio-field">{t('Production instructions')}<textarea value={instruction} onChange={e => setInstruction(e.target.value)} /></label></details>
         <p className="studio-muted">{t('Default limits: 4 GiB / 2 hours; SRT 10 MiB. Import only checks local media; transcription and production wait for your confirmation.')}</p>
-        <div className="studio-import-submit"><Btn type="submit" variant="cta" loading={busy}>{t(busy ? 'Uploading / importing…' : 'Create project')}</Btn></div>
+        <div className="studio-actions studio-import-submit"><Btn onClick={closeImport}>{t('Cancel')}</Btn><Btn type="submit" variant="cta" loading={busy}>{t(busy ? 'Uploading / importing…' : 'Create project')}</Btn></div>
       </fieldset>
       {busy && <p role="status" className="web-note">{t('Keep this page open until upload completes. Do not submit again after a timeout before checking the project list.')}</p>}
       {error && <p className="studio-error" role="alert">{error}</p>}
     </form>
-    <Section title={t('Projects')} count={projects.length} right={<Btn size="sm" onClick={() => setVersion(v => v + 1)}>{t('Refresh')}</Btn>}>
-      {loading && <div className="ac-loading" role="status" aria-label={t('Loading projects…')}><span className="studio-sr">{t('Loading projects…')}</span>
-        <div className="ac-skeleton" /><div className="ac-skeleton" /><div className="ac-skeleton" /></div>}
-      {loadError && <p className="studio-error" role="alert">{loadError}</p>}
-      {!loading && !loadError && !projects.length && <p className="ac-empty"><b>{t('No projects yet')}</b>{t('用上面的表单导入第一个素材。')}</p>}
-      <div className="ac-grid-3">{projects.map(project => <Link className="web-project-card" key={project.id} to={`/project/${project.id}`}>
-        <span className="ac-eyebrow">{t(project.status)}</span><h2>{project.name}</h2>
-        <p className="web-card-metrics"><span>{fmtDuration(project.duration)}</span><span>{project.width} × {project.height}</span></p>
-        <small>{new Date(project.updated_at).toLocaleString()}</small>{project.error && <p className="studio-error">{project.error}</p>}
-      </Link>)}</div>
-    </Section>
+    </Dialog>
   </main>
 }

@@ -132,8 +132,14 @@ export const Dialog: React.FC<{
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRef.current()
       if (e.key === 'Tab') {
-        const elements = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled)') ?? [])
-          .filter(element => !element.closest('fieldset:disabled'))
+        const elements = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary') ?? [])
+          .filter(element => {
+            if (element.closest('fieldset:disabled,[hidden],[inert]')) return false
+            for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+              if (parent instanceof HTMLDetailsElement && !parent.open && !parent.querySelector(':scope > summary')?.contains(element)) return false
+            }
+            return true
+          })
         const first = elements[0], last = elements[elements.length - 1]
         if (!first) { e.preventDefault(); return }
         if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last.focus() }

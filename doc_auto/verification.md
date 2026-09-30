@@ -554,3 +554,38 @@ Update: 2026-09-30T13:59:28.3058828+08:00 — User explicitly requested starting
 Started both services through docker compose up -d --no-build --wait --wait-timeout 180. They are healthy on image sha256:988e07463770f2f6a0d017013418e2bf2516248461443f1d4211eb23071bde3f, still bound to 127.0.0.1:8080. Read-only live verification confirms all 8 projects, 13 drafts and 4 completed exports remain unchanged, task IDs/statuses unchanged with no unexpected production, model/cookie configuration status unchanged, ready legacy plans accessible, all historical exports respond Range 206, and the served frontend is index-Deb8oguS.js with SHA-256 40ce1af1878619e9658981f1d24efa22cb1695096022dfa57a547071eab93763. Evidence: build-verification.json, backup/sha256.json, start.log, deployed-services.txt and live-verification.json in the deployment folder. No model test or paid production request was made; live-model semantic quality acceptance remains open. No source commit or push.
 
 Update: 2026-09-30T14:12:21.7092649+08:00 — User requested GitHub publication of the deployed workflow-parity changes. Preparing one reviewed feature-branch commit on feat/workflow-parity, based on origin/main 2dd456f (fast-forward through the prior build-speed PR merge; no source conflict). The staged-path and configured-secret scan found no credentials/private/generated artifacts; .env, data, backups, models, logs and build output remain excluded. Publication carries the tested implementation, permanent regressions and documentation, not local acceptance media. Existing Windows/Linux race/frontend/browser/deployment results above apply; live-model semantic quality remains unaccepted. Push/PR receipt will be recorded separately after GitHub confirms it.
+
+Update: 2026-09-30T14:35:00+08:00 — GoClip frontend workbench final acceptance.
+
+- Final web source: typecheck/generated-contract check passed; 98/98 tests across
+  18 files passed in 37.31s; build passed in 2.05s. Includes permanent library,
+  import-dialog, keyboard, hidden-file reset, progressive-disclosure, template-save
+  and light/dark contrast regressions, plus all retained production/recovery tests.
+- Browser harness tests: 5/5 passed. Current-source full isolated browser workflow
+  passed in 24.266s: video/SRT upload -> review -> explicit confirmation -> two real
+  automatic 40-second MP4s -> HTTP download/Range/full decode -> editor playback,
+  slider dragging and continuous three-range playback. Four deterministic local
+  model responses, none before confirmation; no paid provider or production data.
+  Evidence: artifacts/parity/20260930/browser/run-n5EsHj/summary.json and
+  artifacts/frontend-redesign/full-workflow.log. All owned test processes stopped.
+- Read-only real-data visual acceptance: 14 desktop/mobile/dark snapshots with
+  loaded video/thumbnails, no horizontal overflow, Escape focus restored, no
+  mutation or API/runtime error. Evidence: frontend-redesign/browser-QSxRH9.
+  This pass preceded only the decorative plus-text -> SVG icon correction; the
+  final isolated workflow verified the resulting index-BXDI7hbi.js build.
+- Earlier rejected runs are retained, not counted as passes: initial JSDOM tests
+  incorrectly treated closed-details children as absent rather than invisible;
+  a template-save test picked the already-selected default; the contrast test
+  used a browser URL with Node fs; first full browser attempt could not match the
+  text-plus-icon import button. Assertions/fixtures or decoration were corrected,
+  with no consent or persistence requirement weakened.
+- git diff --check passed. No Go/backend logic or deployment image changed; no
+  source commit/push. Full historical backend/race results were not rerun or
+  represented as new verification in this frontend-only change.
+- Independent frontend preview started at http://127.0.0.1:4173, PID 21012;
+  frontend and proxied projects endpoint both returned HTTP 200. Existing 8080
+  web/worker were not restarted/replaced. Preview uses the existing backend/data:
+  deliberate user operations there are real, not a sandbox. No operation was
+  automatically submitted. See frontend-workbench.md and operations.md.
+
+Update: 2026-09-30T14:40:00+08:00 — User requested commit/push of the frontend workbench. Publishing only web source, permanent tests, browser harness and affected documentation on feat/workflow-parity. GitHub PR #2 is open for this branch and will receive the commit; no direct protected-branch push or merge. The verified 98-test/typecheck/build and isolated browser evidence above apply. Local .env, data, screenshots, logs, dependency/build output and preview-process files remain ignored. Publication receipt is reported after remote verification.

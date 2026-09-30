@@ -22,24 +22,28 @@ export default function ImportReview() {
     (workspace.workflows ?? []).some(w => ['queued', 'running', 'producing'].includes(w.status))
   const incompleteImport = workspace.tasks.find(task => task.kind === 'import' && task.status !== 'completed')
   const ready = (project?.duration ?? 0) > 0 && !incompleteImport
-  return <main className="ac-page">
+  return <main className="ac-page web-review">
     <Link className="ac-back" to="/">{t('Back to projects')}</Link>
     <h1 className="ac-title">{t('Review imported source')}</h1>
-    <p>{t('Upload → inspect and confirm → production')}</p>
     {error && <p role="alert" className="studio-error">{error}</p>}
     {loading && !project && <p role="status">{t('Loading project…')}</p>}
     {project && <>
-      <h2>{project.name}</h2><p>{fmtDuration(project.duration)} · {project.width} × {project.height}</p>
+      <p className="ac-meta"><b>{project.name}</b><span>{fmtDuration(project.duration)}</span><span>{project.width} × {project.height}</span></p>
       {project.error && <p role="alert" className="studio-error">{project.error}</p>}
       {ready ? <>
+        <div className="web-review-grid"><div className="web-review-source">
         <SourcePreview projectId={project.id} />
+        <details className="studio-details"><summary>{t('Source inspection')}</summary>
+          <Btn disabled={active || busy} onClick={async () => {
+            setBusy(true); setActionError('')
+            try { await api.inspect(project.id); refresh() } catch (cause) { setActionError(errorText(cause)) } finally { setBusy(false) }
+          }}>{t('Recheck local evidence (no model call)')}</Btn>
+        </details>
+        </div><div className="web-review-plan">
         <PlanSummary project={project} active={active} onChanged={refresh}
           initialInstruction={(location.state as { instruction?: string } | null)?.instruction}
           onStarted={() => navigate(`/project/${project.id}`)} />
-        <Btn disabled={active || busy} onClick={async () => {
-          setBusy(true); setActionError('')
-          try { await api.inspect(project.id); refresh() } catch (cause) { setActionError(errorText(cause)) } finally { setBusy(false) }
-        }}>{t('Recheck local evidence (no model call)')}</Btn>
+        </div></div>
       </> : <p role="status">{t(incompleteImport && terminal(incompleteImport)
         ? 'Import did not complete. Review the import task below and retry before production.'
         : 'Importing source. No transcription or production has started.')}</p>}

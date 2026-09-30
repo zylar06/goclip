@@ -313,3 +313,22 @@ Update: 2026-09-30T13:49:08.7123891+08:00 — Final-source Linux verification (1
 Update: 2026-09-30T13:59:28.3058828+08:00 — User explicitly requested starting the new version. Built the repository Dockerfile/Compose web image successfully in 52.2s (BuildKit Completed n8v88qvo9h32hjfffongtvbqr); build Go tests and 88 frontend tests passed. Both prior services had zero queued/running tasks and were cleanly stopped. Full data/model tar backups were made with numeric ownership/modes, listed successfully, checked for DB/master.key/model files and SHA-256 hashed. Backups are private local archives (restricted Windows ACL; not encrypted) under artifacts/deploy/20260930-workflow-parity/backup. Previous image retained as autoclip-go:rollback-20260930-parity; rollback guidance is in that evidence directory's ROLLBACK.md.
 
 Started both services through docker compose up -d --no-build --wait --wait-timeout 180. They are healthy on image sha256:988e07463770f2f6a0d017013418e2bf2516248461443f1d4211eb23071bde3f, still bound to 127.0.0.1:8080. Read-only live verification confirms all 8 projects, 13 drafts and 4 completed exports remain unchanged, task IDs/statuses unchanged with no unexpected production, model/cookie configuration status unchanged, ready legacy plans accessible, all historical exports respond Range 206, and the served frontend is index-Deb8oguS.js with SHA-256 40ce1af1878619e9658981f1d24efa22cb1695096022dfa57a547071eab93763. Evidence: build-verification.json, backup/sha256.json, start.log, deployed-services.txt and live-verification.json in the deployment folder. No model test or paid production request was made; live-model semantic quality acceptance remains open. No source commit or push.
+
+Update: 2026-09-30T14:35:00+08:00 — Independent redesigned-frontend preview.
+
+The production web/worker on 127.0.0.1:8080 were not rebuilt, restarted or replaced.
+The new web/dist (index-BXDI7hbi.js / index-BIcEll7i.css) is served by a hidden
+Vite preview process on 127.0.0.1:4173, started with --strictPort. PID at launch:
+21012. Startup verified HTTP 200 for both / and /api/v1/projects.
+
+This preview proxies the existing backend. It is NOT isolated user data; manually
+confirmed imports/edits/production/settings changes are real. Starting the preview
+made only read requests and no paid calls. It is local-only and not an autostart
+service or a replacement production deployment.
+
+PID record and stdout/stderr: artifacts/frontend-redesign/preview.pid,
+preview.stdout.log, preview.stderr.log. Before stopping, verify the recorded PID's
+command line still identifies this project's vite.js preview with port 4173; PIDs
+can be reused. Stop only that verified process, never the Docker web/worker.
+To restart from web/: npm run preview -- --port 4173 --strictPort.
+Design and final acceptance: frontend-workbench.md, frontend.md, verification.md.

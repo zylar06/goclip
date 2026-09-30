@@ -48,33 +48,33 @@ function ProjectView({ projectId }: { projectId: string }) {
   const project = workspace.project
   const active = workspace.tasks.some(task => !terminal(task)) || (workspace.workflows ?? []).some(w => ['queued', 'running', 'producing'].includes(w.status))
   const ready = (project?.duration ?? 0) > 0 && !workspace.tasks.some(task => task.kind === 'import' && task.status !== 'completed')
+  const taskActivity = workspace.tasks.some(task => task.status !== 'completed')
   const action = async (fn: () => Promise<void>) => {
     setBusy(true); setActionError('')
     try { await fn() } catch (cause) { setActionError(errorText(cause)) } finally { setBusy(false) }
   }
-  return <main className="ac-page">
+  return <main className="ac-page web-project">
     <Link className="ac-back" to="/">{t('Back to projects')}</Link>
     {error && <p className="studio-error" role="alert">{error} <Btn size="sm" onClick={refresh}>{t('Retry')}</Btn></p>}
     {!project ? (loading
       ? <div className="ac-loading" role="status" aria-label={t('Loading project…')}><span className="studio-sr">{t('Loading project…')}</span><div className="ac-skeleton" /><div className="ac-skeleton" /></div>
       : <p role="status" className="ac-empty"><b>{t('Project unavailable.')}</b></p>) : <>
       <header className="studio-row studio-project-head"><div><h1 className="ac-title">{project.name}</h1><p className="ac-meta">{t(project.status)} · {fmtDuration(project.duration)} · {project.width} × {project.height}</p></div>
-        <Btn variant="danger" disabled={active || busy} onClick={() => { setActionError(''); setDeleting(true) }}>{t('Delete project…')}</Btn>
+        {!taskActivity && <Btn size="sm" onClick={refresh}>{t('Refresh')}</Btn>}
       </header>
-      <p className="web-readiness">
-        <span className={`web-pill${ready ? ' web-pill--ok' : ' web-pill--warn'}`}>{t(ready ? 'Source ready' : 'Source importing / unavailable')}</span>
-        <span className="web-stat"><span className="web-stat-label">{t('Drafts')}</span><span className="web-stat-value">{workspace.drafts.length}</span></span>
-        <span className="web-stat"><span className="web-stat-label">{t('Completed exports')}</span><span className="web-stat-value">{workspace.exports.length}</span></span>
-      </p>
+      {!ready && <p role="status" className="web-warning">{t('Source importing / unavailable')}</p>}
       {project.error && <p className="studio-error" role="alert">{project.error}</p>}
-      <TaskPanel tasks={workspace.tasks} connections={connections} onRefresh={refresh} />
-      {ready && <PlanSummary project={project} active={active} onChanged={refresh} onStarted={refresh} />}
-      <Btn disabled={active || busy || !workspace.drafts.some(d => d.subtitles)} onClick={() => setDisableSubtitles(true)}>{t('Disable added subtitles in existing drafts…')}</Btn>
+      {taskActivity && <TaskPanel tasks={workspace.tasks} connections={connections} onRefresh={refresh} />}
+      {ready && (workspace.drafts.length ? <details className="studio-details web-plan-disclosure"><summary>{t('Production settings')}</summary>
+        <PlanSummary project={project} active={active} onChanged={refresh} onStarted={refresh} />
+      </details> : <PlanSummary project={project} active={active} onChanged={refresh} onStarted={refresh} />)}
       <StudioResults projectId={projectId} workspace={workspace} onRefresh={refresh} busy={busy}
         onManual={() => action(async () => {
           const draft = await api.createDraft(projectId, newDraft(t('New draft'), [{ id: newID(), label: t('Source'), start: 0, end: Math.min(project.duration, 30), evidence: '' }]))
           navigate(`/project/${projectId}/studio/${draft.id}`)
         })} />
+      <div className="web-source-tools">
+      {!taskActivity && <TaskPanel tasks={workspace.tasks} connections={connections} onRefresh={refresh} />}
       <details className="studio-details"><summary>{t('Source video')}</summary>
         {ready && <SourcePreview projectId={projectId} />}
       </details>
@@ -88,6 +88,11 @@ function ProjectView({ projectId }: { projectId: string }) {
             navigate(`/project/${projectId}/studio/${draft.id}`)
           })}>{t('Use in new draft')}</Btn>
         </div>)}</details>
+      <details className="studio-details"><summary>{t('Project actions')}</summary><div className="studio-actions">
+        {workspace.drafts.some(d => d.subtitles) && <Btn disabled={active || busy} onClick={() => setDisableSubtitles(true)}>{t('Disable added subtitles in existing drafts…')}</Btn>}
+        <Btn variant="danger" disabled={active || busy} onClick={() => { setActionError(''); setDeleting(true) }}>{t('Delete project…')}</Btn>
+      </div></details>
+      </div>
       <Dialog open={deleting} title={t('Delete project permanently?')} onClose={() => !busy && setDeleting(false)} description={t('This removes the source, drafts, task history, and exports for all users. Active tasks must finish first.')}
         footer={<div className="studio-actions"><Btn disabled={busy} onClick={() => setDeleting(false)}>{t('Keep project')}</Btn><Btn variant="danger" loading={busy} disabled={active} onClick={() => action(async () => { await api.removeProject(projectId); navigate('/') })}>{t('Confirm permanent deletion')}</Btn></div>}>
         <p>{project.name}</p>{actionError && <p role="alert" className="studio-error">{actionError}</p>}

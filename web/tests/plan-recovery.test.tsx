@@ -46,7 +46,7 @@ describe('plan recovery and cost boundaries', () => {
     await waitFor(() => expect(revisions).toEqual([4, 4]))
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1)
     expect(await screen.findByText(/This plan was already confirmed/)).toBeInTheDocument()
-    expect(cost()).not.toBeChecked()
+    expect(screen.queryByLabelText('I understand and approve possible additional charges.')).not.toBeInTheDocument()
   })
 
   it('refresh after acceptance never starts another round until explicitly requested with new consent', async () => {
@@ -60,9 +60,9 @@ describe('plan recovery and cost boundaries', () => {
     })
     const user = userEvent.setup()
     render(<PlanSummary {...props} project={{ ...project, plan: saved }} />)
-    await screen.findByText(base.reason, { exact: false })
-    await user.click(cost())
-    expect(start()).toBeDisabled()
+    await screen.findByText(/This plan was already confirmed/)
+    expect(screen.queryByLabelText('I understand and approve possible additional charges.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm and start production' })).not.toBeInTheDocument()
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Prepare another production round' }))
     expect(cost()).not.toBeChecked()

@@ -29,7 +29,7 @@ export function ModelForm({ kind, initial }: { kind: ModelKind; initial: ModelSt
     } catch (cause) { setError(errorText(cause)) } finally { setBusy('') }
   }
   const label = kind === 'text' ? 'Text' : 'Vision'
-  return <Section title={t(`${label} model`)} description={t(kind === 'text' ? 'Used for subtitle analysis, rewriting, and translation.' : 'Used only when you explicitly approve sampled image analysis.')}>
+  return <Section title={t(`${label} model`)} description={t(kind === 'text' ? 'Used for subtitle analysis and clip titles.' : 'Used only when you explicitly approve sampled image analysis.')}>
     <form onSubmit={e => { e.preventDefault(); void run('save') }}>
       <fieldset disabled={!!busy} className="studio-fieldset" aria-label={t(`${label} model settings`)}>
         <label className="studio-field">{t(`${label} base URL`)}<input type="url" required value={baseURL} onChange={e => setBaseURL(e.target.value)} placeholder="https://provider.example/v1" /></label>
@@ -96,10 +96,11 @@ export default function SettingsPage() {
       .catch(cause => { if (!controller.signal.aborted) setError(errorText(cause)) })
     return () => controller.abort()
   }, [version])
-  return <main className="ac-page ac-page--narrow"><h1 className="ac-title">{t('Settings')}</h1>
+  return <main className="ac-page ac-page--narrow web-settings"><h1 className="ac-title">{t('Settings')}</h1>
     <p className="ac-sub">{t('Text and vision settings are saved and tested independently. Keys stay on the server, not in local storage.')}</p>
     {error && <p role="alert" className="studio-error">{error} <Btn size="sm" onClick={() => setVersion(v => v + 1)}>{t('Retry')}</Btn></p>}
     {!settings && !error && <div className="ac-loading" role="status" aria-label={t('Loading settings…')}><span className="studio-sr">{t('Loading settings…')}</span><div className="ac-skeleton" /><div className="ac-skeleton" /></div>}
-    {settings && <><ModelForm kind="text" initial={settings.text} /><ModelForm kind="vision" initial={settings.vision} /><CookiesForm initial={settings.cookies_configured} /></>}
+    {settings && <><div className="web-model-grid"><ModelForm kind="text" initial={settings.text} /><ModelForm kind="vision" initial={settings.vision} /></div><CookiesForm initial={settings.cookies_configured} /></>}
+    <p className="web-installation-note">GoClip {__APP_VERSION__}<br />{t('Trusted LAN / VPN only. Shared projects and cloud costs.')}</p>
   </main>
 }

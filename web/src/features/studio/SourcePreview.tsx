@@ -35,13 +35,14 @@ export function useSourcePreview(projectId: string) {
 export function PreviewControls({ preview }: { preview: ReturnType<typeof useSourcePreview> }) {
   const { t } = useTranslation()
   const active = ['queued', 'running'].includes(preview.state.status)
-  return <div className="studio-details">
+  return <details className="studio-details" open={active || !!preview.error || !!preview.state.task?.error}>
+    <summary>{t('Playback compatibility')}</summary>
     <p className="studio-muted">{t('Compatible preview is local conversion, not cloud analysis. Original media is retained.')}</p>
     <p role="status">{t('Compatible preview')}: {t(preview.state.status)} {preview.state.task?.stage} {preview.state.task?.progress != null ? `${preview.state.task.progress}%` : ''}</p>
     <Btn size="sm" disabled={active || preview.busy || preview.state.status === 'completed'} onClick={preview.start}>{t('Create compatible preview')}</Btn>
     <Btn size="sm" onClick={preview.refresh}>{t('Refresh preview status')}</Btn>
     {(preview.error || preview.state.task?.error) && <p role="alert" className="studio-error">{preview.error || preview.state.task?.error}</p>}
-  </div>
+  </details>
 }
 export default function SourcePreview({ projectId }: { projectId: string }) {
   const preview = useSourcePreview(projectId)
