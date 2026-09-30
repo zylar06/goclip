@@ -96,14 +96,16 @@ func (w *Worker) produceFused(ctx context.Context, t domain.Task, dir string, pr
 		return fmt.Errorf("no highlight candidates from subtitle or visual evidence")
 	}
 	drafts := fusedDrafts(fused, append(textDrafts, visualDrafts...), o)
-	if err = w.attachVisualReframes(ctx, dir, source, drafts, o.Aspect, progress); err != nil {
-		return err
-	}
 	for i := range drafts {
 		hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d", wf.ID, drafts[i].Scenes[0].ID, i)))
 		drafts[i].ID = fmt.Sprintf("%x", hash[:16])
 		drafts[i].Goal = "highlight"
 		drafts[i].Origin = "fused-highlight"
+	}
+	// Reframe artifacts are keyed by the final draft ID; assign IDs before the
+	// engine runs so portrait exports can find the exact artifact later.
+	if err = w.attachVisualReframes(ctx, dir, source, drafts, o.Aspect, progress); err != nil {
+		return err
 	}
 	result := domain.GoalResult{Goal: "highlight", Status: "completed", DraftIDs: make([]string, 0, len(drafts))}
 	for _, d := range drafts {

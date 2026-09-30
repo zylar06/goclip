@@ -37,6 +37,30 @@ func TestOverallSampleTimesParity(t *testing.T) {
 	}
 }
 
+func TestEverySecondTimes(t *testing.T) {
+	for _, tc := range []struct {
+		duration float64
+		want     []float64
+	}{
+		{0, []float64{0}},
+		{0.4, []float64{0}},
+		{1, []float64{0}},
+		{2.1, []float64{0, 1, 2}},
+		{60, []float64{0, 1, 2}},
+	} {
+		got := EverySecondTimes(tc.duration)
+		if tc.duration == 60 {
+			if len(got) != 60 || got[59] != 59 {
+				t.Fatalf("duration=%v: got %d samples, last=%v", tc.duration, len(got), got[len(got)-1])
+			}
+			continue
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("duration=%v: got %v, want %v", tc.duration, got, tc.want)
+		}
+	}
+}
+
 func TestSampleAtExactSeeksAndOrder(t *testing.T) {
 	tools, source, dir := fakeTools(t, "normal")
 	log := filepath.Join(dir, "argv.jsonl")
