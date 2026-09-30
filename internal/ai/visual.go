@@ -50,13 +50,15 @@ const (
 	refineSkipped      = "skipped"
 )
 
-// Sampled timestamps reach the provider only at the precision of the
-// "Source timestamp %.3f seconds" label written by Client.Complete, so a model
-// that faithfully echoes a supplied sample returns the rounded value, not the
-// exact float. Sampling at i*duration/count almost never lands on a 3-decimal
-// value, so an exact comparison rejected correct answers. Accept a match within
-// the transmitted precision; an exact match stays exact.
+// Sampled timestamps reach the provider as a human-readable label. Providers
+// sometimes simplify that label further (for example, returning 5 for 4.997 or
+// 12.49 for 12.493), so matching only at the transmitted millisecond precision
+// still rejects a faithful citation. Keep the general event-bound tolerance
+// strict, but allow a small display-rounding window when resolving evidence to
+// one of the actual images in the request. The sampling interval is at least a
+// second, so this cannot ambiguously select a neighbouring frame.
 const frameTimeTolerance = 1e-3
+const frameMatchTolerance = 5e-2
 
 // Matches upstream Scene.label default so a segment with no prose is still
 // editable rather than a discarded paid run.
@@ -69,7 +71,7 @@ func nearestFrame(frames []domain.Frame, tm float64) (float64, bool) {
 	best, gap, found := 0., 0., false
 	for _, f := range frames {
 		d := math.Abs(f.Time - tm)
-		if d <= frameTimeTolerance && (!found || d < gap) {
+		if d <= frameMatchTolerance && (!found || d < gap) {
 			best, gap, found = f.Time, d, true
 		}
 	}
@@ -219,12 +221,15 @@ func validateVisual(value *visualResult, frames []domain.Frame, start, end, maxD
 		times := map[float64]bool{}
 		snapped := make([]float64, 0, len(e.FrameTimes))
 		for _, tm := range e.FrameTimes {
-			if !finite(tm) || tm < float64(*e.Start)-frameTimeTolerance || tm > float64(*e.End)+frameTimeTolerance {
+			if !finite(tm) || tm < float64(*e.Start)-frameMatchTolerance || tm > float64(*e.End)+frameMatchTolerance {
 				continue
 			}
 			exact, found := nearestFrame(frames, tm)
 			if !found {
 				return invalid("Visual event cites a frame that was not supplied to this request.")
+			}
+			if exact < float64(*e.Start)-frameMatchTolerance || exact > float64(*e.End)+frameMatchTolerance {
+				continue
 			}
 			if times[exact] {
 				continue

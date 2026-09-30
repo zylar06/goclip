@@ -391,6 +391,22 @@ func TestVisualStillRejectsUnsuppliedFrameTimestamps(t *testing.T) {
 	}
 }
 
+func TestVisualAcceptsProviderSimplifiedFrameTimestamps(t *testing.T) {
+	model := visualModel()
+	// The request supplies 10.000 and 20.000, while some providers simplify
+	// nearby displayed timestamps to fewer decimals. This must still resolve to
+	// the actual supplied images, without accepting a genuinely distant frame.
+	model.replies["visual"] = strings.Replace(scanReply, `"frame_times":[10,20]`, `"frame_times":[10.04,19.96]`, 1)
+	model.replies["refine"] = strings.Replace(refineReply, `"frame_times":[10,20]`, `"frame_times":[10.04,19.96]`, 1)
+	_, candidates, err := AnalyzeVisual(context.Background(), model.client(t), fixtureFrames(t), 60, visualOptions(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("provider-rounded timestamps must snap to supplied frames: %v", err)
+	}
+	if len(candidates) != 2 || candidates[1].Start != 10 || candidates[1].End != 24 {
+		t.Fatalf("expected snapped gameplay candidate, got %+v", candidates)
+	}
+}
+
 // Two cited timestamps can legitimately snap to the same supplied frame when
 // sampling is coarse, so they are deduplicated rather than treated as a fatal
 // duplicate. An event must still cite at least one real supplied frame.
