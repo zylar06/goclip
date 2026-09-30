@@ -531,3 +531,22 @@ Final R2-09 write scope: `internal/media/download.go`, `argv_test.go`,
 `process_test.go`, new `download_subtitles_test.go`, the three media-local logs
 above, and this document. Media implementation/testing is frozen for handoff;
 this does not claim acceptance of main's worker integration or review-2 overall.
+
+Update: 2026-09-30T14:57:00+08:00 — CI process-observation regressions.
+
+TestLinuxCancellationKillsProcessGroup raced with kernel process reaping: a
+successful signal-0 probe and proc open can be followed by ESRCH on read. Extracted
+a test-only observation helper that accepts ENOENT/ESRCH or zombie status, still
+rejects live processes, and returns permission/I/O errors. Eight deterministic
+cases include a wrapped PathError ESRCH matching PR job 109771565922. The new
+case failed without its correction. Runtime prepareProcess/run are unchanged.
+Hosted race tests retain their 180-second limit but use GORACE=atexit_sleep_ms=0
+to avoid the fake test-binary tools accumulating one-second runtime exit sleeps.
+See verification.md and artifacts/ci-fix/ for negative and final acceptance logs.
+
+Update: 2026-09-30T15:04:00+08:00 — Process-observation fix verified on Linux.
+Full race and CGO_ENABLED=0 suites pass all eight packages; media 79.757s and
+40.405s respectively, both within 180s. The actual cancellation test and eight
+process-state cases pass 100 repetitions with race and 100 without. go vet
+passes; no production media code changed. Only the pre-existing optional real
+Whisper check skips without its speech fixture. See verification.md for evidence.

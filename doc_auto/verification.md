@@ -589,3 +589,55 @@ Update: 2026-09-30T14:35:00+08:00 — GoClip frontend workbench final acceptance
   automatically submitted. See frontend-workbench.md and operations.md.
 
 Update: 2026-09-30T14:40:00+08:00 — User requested commit/push of the frontend workbench. Publishing only web source, permanent tests, browser harness and affected documentation on feat/workflow-parity. GitHub PR #2 is open for this branch and will receive the commit; no direct protected-branch push or merge. The verified 98-test/typecheck/build and isolated browser evidence above apply. Local .env, data, screenshots, logs, dependency/build output and preview-process files remain ignored. Publication receipt is reported after remote verification.
+
+Update: 2026-09-30T14:57:00+08:00 — Hosted CI failure diagnosis and regression fix.
+
+The three failed checks on 9ce3e7a are two distinct media-test issues, not frontend
+failures. GitHub runs 36679475093 (PR) and 36679471267 (push) both hit the media
+package's 180-second race deadline. The PR container job 109771565922 failed
+TestLinuxCancellationKillsProcessGroup because reading /proc/<pid>/status returned
+ESRCH after process reaping. The same push container job passed.
+
+CI now sets GORACE=atexit_sleep_ms=0 for the existing go test -race command: this
+removes only the race runtime's per-process exit delay for fake native tools;
+-race, REQUIRE_MEDIA_TESTS=1 and the 180-second deadline remain unchanged.
+The earlier local parity verification used this setting but the hosted workflow
+did not, which explains why its passing result did not cover the hosted timeout.
+A Node regression executes the workflow's literal command/environment against a
+stub, checks retained native/race gates and runs in the test job before Go tests.
+
+The Linux cancellation assertion now handles wrapped ESRCH from /proc reads as
+an exited process, as well as ENOENT and zombie state. Permission/I/O failures
+remain explicit errors; a live descendant is never accepted. Eight injected-state
+regressions cover both exit races and these negative cases. Production process
+cancellation code is unchanged; only the test observation helper is corrected.
+
+Negative controls: the new workflow tests failed twice against the old YAML;
+the Linux regression reproduced "read /proc/42/status: no such process" without
+the ESRCH fix. Evidence: artifacts/ci-fix/ci-negative.log, proc-negative.log.
+Final local/hosted results are appended after they complete. No test skip,
+continue-on-error, timeout extension or production service/data change is used.
+
+Update: 2026-09-30T15:04:00+08:00 — CI repair local verification completed.
+
+- Offline Linux clean-source run: full race suite passed all eight packages,
+  595 passing tests/subtests, zero failures, media 79.757s under the unchanged
+  180s package limit. The existing optional real Whisper test skipped because
+  no speech fixture was supplied; real FFmpeg integration tests ran. No ASR
+  behavior changed. This local image is Go 1.27.1; hosted setup-go follows go.mod.
+- go vet passed; full CGO_ENABLED=0 suite passed all eight packages (media 40.405s).
+  Process cancellation plus eight injected process-state cases passed 100 repeats
+  without race (0.312s) and 100 repeats with race (0.390s).
+- Node CI/browser-harness regression suite: 7/7 passed; gofmt and diff check clean.
+- Evidence: artifacts/ci-fix/linux-race.jsonl, linux-vet.log,
+  linux-container-tests.log, linux-proc{,-race}-stress.log, node-final.log;
+  linux-final.exit=0. All verification containers are stopped; production untouched.
+- The first full local attempt was stopped before testing: walking the entire
+  Windows-mounted workspace (including ignored dependencies/artifacts) blocked
+  package discovery. The replacement unpacked only tracked source plus the new
+  regression script into the isolated container. Its approximately five-minute
+  total included cold race and ordinary dependency compilation; test-package
+  deadlines were not extended. No network or production data was mounted.
+- The new workflow and process-state regressions had explicit failing controls
+  before their fixes. Hosted push/PR green status is not inferred from local
+  acceptance; it will be checked after this commit is pushed to PR #2.

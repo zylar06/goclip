@@ -16,10 +16,14 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - run: node --test scripts/ci.test.mjs
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: go test -race -timeout 180s ./...
         env:
           REQUIRE_MEDIA_TESTS: "1"
+          # Fake native tools reuse the race-instrumented test binary. Avoid a
+          # one-second exit sleep per subprocess; race reporting stays enabled.
+          GORACE: "atexit_sleep_ms=0"
       - run: go vet ./...
       - run: go run ./cmd/specgen && git diff --exit-code api/openapi.json
       - run: npm ci && npm run typecheck && npm test && npm run build

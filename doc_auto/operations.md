@@ -332,3 +332,13 @@ command line still identifies this project's vite.js preview with port 4173; PID
 can be reused. Stop only that verified process, never the Docker web/worker.
 To restart from web/: npm run preview -- --port 4173 --strictPort.
 Design and final acceptance: frontend-workbench.md, frontend.md, verification.md.
+
+Update: 2026-09-30T14:57:00+08:00 — Hosted CI race configuration alignment.
+
+The Go test job runs scripts/ci.test.mjs before its full race/native test command.
+GORACE=atexit_sleep_ms=0 is scoped to that command: fake native tools reuse the
+race-instrumented test executable, and their default exit sleeps otherwise exceed
+the aggregate media-package deadline. Race detection and the original 180-second
+package timeout stay enabled; Docker's ordinary tests/smoke are unchanged.
+The separate Linux /proc process-reaping assertion now handles ESRCH correctly.
+This changes verification configuration/tests only, not production services.
