@@ -55,17 +55,14 @@ type PreviewStatus struct {
 }
 
 func LocalPlan(p Project, revision int) ProductionPlan {
-	goals := []string{}
-	reason := "未找到可用字幕，尚未判断内容质量；请选择制作类型。字幕分析将在确认后按需转写。"
+	goals := []string{"highlight"}
+	reason := "将结合字幕和抽样画面寻找高光片段；没有字幕时会尝试本地转写，仍可使用画面证据。"
 	if p.SubtitleStatus == "available" {
-		goals = []string{"content"}
-		reason = "检测到可用字幕，建议按完整语义制作；这是本地检查，尚未调用模型或判断内容质量。"
+		reason = "检测到可用字幕；默认同时使用字幕和抽样画面寻找高光，这是本地检查，尚未调用模型。"
 	} else if p.HasAudio != nil && !*p.HasAudio {
-		reason = "素材无音轨且没有可用字幕；可选择视觉高光，或手动剪辑。"
+		reason = "素材无音轨且没有可用字幕；默认使用抽样画面寻找高光。"
 	}
 	return ProductionPlan{Revision: revision, Status: "awaiting_confirmation",
-		// Smart is safe by default: it remains local/subtitle-only until this
-		// specific production confirms sampled-frame transmission.
-		Options:        AnalysisOptions{Mode: "auto", Goals: goals, Aspect: "original"},
+		Options:        AnalysisOptions{Mode: "fused", Goals: goals, Aspect: "original"},
 		SuggestedGoals: goals, Reason: reason}
 }

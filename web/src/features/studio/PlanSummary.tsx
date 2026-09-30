@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api, errorText } from '../../api/client'
 import type { PlanOptions, ProductionPlan, Project } from '../../api/contracts'
 import { Btn, Section } from '../../ui'
+import { highlightScenarios } from './highlightScenarios'
 
 export const defaultPlanOptions: PlanOptions = {
 	mode: 'auto', goals: [], duration: 0, aspect: 'original', category: '', instruction: '',
@@ -29,6 +30,7 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
   const [stale, setStale] = useState(false)
   const [pendingRevision, setPendingRevision] = useState<number | null>(null)
   const [newRound, setNewRound] = useState(false)
+  const [scenarioId, setScenarioId] = useState('general')
   const dirty = useRef(false)
   const saving = useRef(false)
   useEffect(() => {
@@ -41,6 +43,7 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
       dirty.current = !value.options.instruction && !!initialInstruction
       setAutoExport(value.auto_export); setPaid(false); setImages(false); setError(''); setStale(false)
       setNewRound(false)
+      setScenarioId('general')
     }).catch(cause => { if (!controller.signal.aborted) setError(errorText(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
@@ -66,7 +69,7 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
   const valid = !incompatible && options.goals.length > 0 && Number.isInteger(options.duration) &&
     (options.duration === 0 || (options.duration >= 10 && options.duration <= 120)) &&
     new TextEncoder().encode(options.instruction).length <= 4000
-	const consent = paid && (options.mode !== 'visual' || images)
+    const consent = paid && (!['visual', 'fused'].includes(options.mode) || images)
   const save = async (start: boolean) => {
     if (!plan || !valid || saving.current || loading || active || stale ||
       (locked && !(start && pendingRevision !== null)) || (start && !consent)) return
@@ -76,7 +79,7 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
     if (start) { setPaid(false); setImages(false) }
     try {
       let saved = plan
-		const allowVisual = (options.mode === 'visual' || options.mode === 'auto') && images
+		const allowVisual = (options.mode === 'visual' || options.mode === 'auto' || options.mode === 'fused') && images
       // An unchanged persisted plan (including after refresh) can be confirmed directly.
       // In particular, an unknown confirmation MUST NOT be preceded by another PUT.
       if (pendingRevision === null && (!start || dirty.current || newRound || !!plan.options.allow_visual !== allowVisual)) {
@@ -117,10 +120,16 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
     {pendingRevision !== null && <p role="status">{t('Confirmation outcome is unknown. Reconfirm only this saved revision; no new production round will be created.')}</p>}
     <fieldset className="studio-fieldset" disabled={busy || active || loading || !plan}>
       <fieldset className="studio-fieldset" disabled={locked}>
-      <div className="studio-actions" role="group" aria-label={t('Goals')}>{(['content', 'highlight', 'promo'] as const).map(goal =>
+      <label className="studio-field">高光场景
+        <select value={scenarioId} onChange={e => { const scenario = highlightScenarios.find(item => item.id === e.target.value) || highlightScenarios[0]; setScenarioId(scenario.id); patch({ instruction: scenario.rules }) }}>
+          {highlightScenarios.map(scenario => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}
+        </select>
+        <small className="studio-muted">{highlightScenarios.find(item => item.id === scenarioId)?.description}</small>
+      </label>
+      <div className="studio-actions" role="group" aria-label={t('Goals')}>{(options.mode === 'fused' ? ['highlight'] as const : ['content', 'highlight', 'promo'] as const).map(goal =>
         <label key={goal}><input type="checkbox" checked={options.goals.includes(goal)} onChange={e => patch({ goals: e.target.checked ? [...options.goals, goal] : options.goals.filter(g => g !== goal) })} />{t(goal)} {plan?.suggested_goals?.includes(goal) && <small>{t('Suggested')}</small>}</label>)}</div>
       <div className="studio-fields web-plan-fields">
-		<label className="studio-field">{t('Analysis mode')}<select value={options.mode} onChange={e => { patch({ mode: e.target.value as PlanOptions['mode'] }); setImages(false) }}><option value="subtitle">{t('Text / subtitles')}</option><option value="auto">{t('Smart (subtitles first)')}</option><option value="visual">{t('Vision / sampled frames')}</option></select></label>
+		<label className="studio-field">{t('Analysis mode')}<select value={options.mode} onChange={e => { patch({ mode: e.target.value as PlanOptions['mode'], ...(e.target.value === 'fused' ? { goals: ['highlight'] } : {}) }); setImages(false) }}><option value="fused">高光融合（字幕 + 画面）</option><option value="subtitle">{t('Text / subtitles')}</option><option value="auto">{t('Smart (subtitles first)')}</option><option value="visual">{t('Vision / sampled frames')}</option></select></label>
         <label className="studio-field">{t('Target seconds (0 = automatic)')}<input type="number" min={0} max={120} step={1} value={options.duration} onChange={e => patch({ duration: Number(e.target.value) })} /></label>
         <label className="studio-field">{t('Aspect')}<select value={options.aspect} onChange={e => patch({ aspect: e.target.value as PlanOptions['aspect'] })}><option value="original">{t('Original')}</option><option value="portrait">9:16</option><option value="landscape">16:9</option></select></label>
         <label className="studio-field">{t('Content type')}<select value={options.category || ''} onChange={e => patch({ category: e.target.value })}><option value="">{t('General')}</option>{['knowledge', 'speech', 'opinion', 'experience', 'business', 'entertainment', 'content_review'].map(c => <option key={c} value={c}>{t(c)}</option>)}</select></label>
@@ -133,8 +142,9 @@ function PlanForm({ project, active, onChanged, onStarted, initialInstruction = 
       <label className="web-consent"><input type="checkbox" checked={autoExport} onChange={e => { dirty.current = true; setAutoExport(e.target.checked); setPaid(false) }} />{t('One-click MP4 for highlight / promo')}</label>
       <p className="web-note">{t('Content clips always export MP4 automatically. Other goals create editable drafts unless one-click MP4 is enabled.')}</p>
       </fieldset>
-	  {(options.mode === 'visual' || options.mode === 'auto') && <label className="web-consent"><input type="checkbox" checked={images} onChange={e => setImages(e.target.checked)} />{t('I allow sampled video images to be uploaded to the saved vision model provider.')}</label>}
-      <p className="studio-muted">{t(mixed ? 'This mixed plan sends subtitle text to the saved text model for content, and sampled images to the saved vision model for visual goals. Both paths may incur charges; images do not reveal speech.'
+	  {(options.mode === 'visual' || options.mode === 'auto' || options.mode === 'fused') && <label className="web-consent"><input type="checkbox" checked={images} onChange={e => setImages(e.target.checked)} />{t('I allow sampled video images to be uploaded to the saved vision model provider.')}</label>}
+	      <p className="studio-muted">{t(options.mode === 'fused' ? '高光融合会同时分析字幕和抽样画面，再合并重叠证据。没有字幕时仍可使用视觉证据。'
+        : mixed ? 'This mixed plan sends subtitle text to the saved text model for content, and sampled images to the saved vision model for visual goals. Both paths may incur charges; images do not reveal speech.'
         : options.mode === 'visual' ? 'Vision uses sampled images only, not audio or the full transcript. For lectures, interviews, or talking-head videos, use Text / subtitles to find highlights in the spoken content. No highlights may be found from images alone.' : 'Subtitle text may be sent to the saved text model. No video images will be sent.')}</p>
       <label className="web-consent"><input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} />{t('I understand and approve possible additional charges.')}</label>
       <div className="studio-actions"><Btn disabled={!valid || stale || locked} onClick={() => save(false)}>{t('Save plan only')}</Btn><Btn variant="cta" disabled={!valid || stale || !consent || (locked && pendingRevision === null)} onClick={() => save(true)}>{t(pendingRevision !== null ? 'Reconfirm saved revision' : 'Confirm and start production')}</Btn>

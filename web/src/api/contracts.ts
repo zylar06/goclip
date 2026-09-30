@@ -24,7 +24,7 @@ export interface ProjectDetail {
   workflows?: Workflow[]
 }
 export type AnalysisOptions = Omit<Wire.AnalysisOptions, 'mode' | 'confirmed' | 'goals' | 'aspect'> & {
-  mode: 'subtitle' | 'auto' | 'visual'; allow_visual: boolean; confirmed: true
+  mode: 'subtitle' | 'auto' | 'visual' | 'fused'; allow_visual: boolean; confirmed: true
   goals: ('content' | 'highlight' | 'promo')[]; duration: number; aspect: Draft['aspect']
   instruction: string
   burn_subtitles?: boolean

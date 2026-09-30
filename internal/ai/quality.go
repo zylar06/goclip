@@ -28,7 +28,7 @@ func normalizeOptions(opts domain.AnalysisOptions) (domain.AnalysisOptions, erro
 	}
 	if opts.Duration < 0 || opts.Duration > 1800 || !oneOf(opts.Aspect, "original", "portrait", "landscape") ||
 		!textOK(opts.Instruction, 4000, false) || !validCategory(opts.Category) ||
-		!oneOf(opts.Mode, "", "subtitle", "auto", "visual") || len(opts.Goals) > 3 {
+		!oneOf(opts.Mode, "", "subtitle", "auto", "visual", "fused") || len(opts.Goals) > 3 {
 		return opts, invalid("Invalid analysis duration, aspect, category, mode or instruction.")
 	}
 	seen := map[string]bool{}

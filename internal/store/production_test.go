@@ -275,10 +275,7 @@ func TestLegacyProjectEvidenceUsesValidatedExistingCues(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := []string{}
-			if tc.status == "available" {
-				want = []string{"content"}
-			}
+			want := []string{"highlight"}
 			if !reflect.DeepEqual(plan.Options.Goals, want) || !reflect.DeepEqual(plan.SuggestedGoals, want) ||
 				plan.Options.Confirmed || plan.Options.BurnSubtitles {
 				t.Fatalf("invalid local recommendation or implicit consent: %+v", plan)

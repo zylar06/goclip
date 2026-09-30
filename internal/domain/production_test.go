@@ -9,10 +9,10 @@ func TestAnalysisAndSubtitleRenderingAreIndependent(t *testing.T) {
 	}
 	p := Project{SubtitleStatus: "available"}
 	plan := LocalPlan(p, 1)
-	if plan.Options.Mode != "auto" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Duration != 0 || plan.Options.Confirmed {
+	if plan.Options.Mode != "fused" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Duration != 0 || plan.Options.Confirmed {
 		t.Fatal(plan)
 	}
-	if len(plan.SuggestedGoals) != 1 || plan.SuggestedGoals[0] != "content" {
+	if len(plan.SuggestedGoals) != 1 || plan.SuggestedGoals[0] != "highlight" {
 		t.Fatal(plan)
 	}
 }
@@ -20,7 +20,7 @@ func TestAnalysisAndSubtitleRenderingAreIndependent(t *testing.T) {
 func TestNoAudioDoesNotPretendToKnowSpeech(t *testing.T) {
 	no := false
 	plan := LocalPlan(Project{HasAudio: &no}, 1)
-	if len(plan.SuggestedGoals) != 0 || plan.Options.Confirmed {
+	if len(plan.SuggestedGoals) != 1 || plan.SuggestedGoals[0] != "highlight" || plan.Options.Confirmed {
 		t.Fatal(plan)
 	}
 }

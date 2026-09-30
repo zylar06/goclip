@@ -12,8 +12,8 @@ import (
 )
 
 func validateProductionOptions(o domain.AnalysisOptions) error {
-	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" {
-		return bad("Choose subtitle, smart or visual analysis")
+	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" && o.Mode != "fused" {
+		return bad("Choose highlight fusion, subtitle, smart or visual analysis")
 	}
 	if o.Duration != 0 && (o.Duration < 10 || o.Duration > 120) {
 		return bad("Choose automatic duration or an expected duration between 10 and 120 seconds")
@@ -101,9 +101,9 @@ func (a *API) validateProductionModels(options domain.AnalysisOptions) error {
 		return bad("Explicit permission to send sampled images is required")
 	}
 	kinds := []string{"text"}
-	if options.Mode == "visual" {
+	if options.Mode == "visual" || options.Mode == "fused" {
 		kinds = []string{"vision"}
-		if slices.Contains(options.Goals, "content") || slices.Contains(options.Goals, "promo") {
+		if options.Mode == "fused" || slices.Contains(options.Goals, "content") || slices.Contains(options.Goals, "promo") {
 			kinds = append(kinds, "text")
 		}
 	}

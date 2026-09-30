@@ -41,7 +41,7 @@ func TestPlanRequiresExplicitConfirmationAndPreservesSafeSmartDefault(t *testing
 	if err := json.Unmarshal(got.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if plan.Options.Mode != "auto" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Confirmed || plan.Options.Duration != 0 {
+	if plan.Options.Mode != "fused" || plan.Options.AllowVisual || plan.Options.BurnSubtitles || plan.Options.Confirmed || plan.Options.Duration != 0 {
 		t.Fatal(plan)
 	}
 	tasks, _ := a.Store.Tasks(pid)
@@ -56,7 +56,7 @@ func TestPlanRequiresExplicitConfirmationAndPreservesSafeSmartDefault(t *testing
 	if got.Code != 400 {
 		t.Fatal("missing model accepted", got.Code)
 	}
-	if err := a.Store.PutModels(map[string]domain.ModelSettings{"text": {BaseURL: "https://example.com/v1", Model: "test"}}); err != nil {
+	if err := a.Store.PutModels(map[string]domain.ModelSettings{"text": {BaseURL: "https://example.com/v1", Model: "test"}, "vision": {BaseURL: "https://example.com/v1", Model: "vision", Capability: "multimodal"}}); err != nil {
 		t.Fatal(err)
 	}
 	got = request(h, "POST", path+"/confirm", `{"plan_revision":1,"confirmed":true}`)
@@ -133,7 +133,7 @@ func TestAcceptedConfirmationReplaysAfterPlanEditAndModelRemoval(t *testing.T) {
 	a, pid := readyProductionAPI(t)
 	if err := a.Store.PutModels(map[string]domain.ModelSettings{"text": {
 		BaseURL: "http://127.0.0.1:1/v1", Model: "not-called",
-	}}); err != nil {
+	}, "vision": {BaseURL: "http://127.0.0.1:1/v1", Model: "vision", Capability: "multimodal"}}); err != nil {
 		t.Fatal(err)
 	}
 	h, path := a.Handler(), "/api/v1/projects/"+pid
@@ -239,6 +239,8 @@ func TestLegacySubtitleEvidencePlanCanBeConfirmedWithoutEditing(t *testing.T) {
 	}
 	if err := a.Store.PutModels(map[string]domain.ModelSettings{"text": {
 		BaseURL: "http://127.0.0.1:1/v1", Model: "not-called",
+	}, "vision": {
+		BaseURL: "http://127.0.0.1:1/v1", Model: "not-called", Capability: "multimodal",
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -251,8 +253,8 @@ func TestLegacySubtitleEvidencePlanCanBeConfirmedWithoutEditing(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(plan.Options.Goals, []string{"content"}) ||
-		!reflect.DeepEqual(plan.SuggestedGoals, []string{"content"}) ||
+	if !reflect.DeepEqual(plan.Options.Goals, []string{"highlight"}) ||
+		!reflect.DeepEqual(plan.SuggestedGoals, []string{"highlight"}) ||
 		plan.Options.Confirmed || plan.Options.BurnSubtitles {
 		t.Fatalf("valid old cues were not used as unconfirmed local evidence: %+v", plan)
 	}

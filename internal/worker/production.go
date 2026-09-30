@@ -135,6 +135,9 @@ func (w *Worker) produce(ctx context.Context, t domain.Task, dir string, progres
 	if err != nil {
 		return err
 	}
+	if wf.Options.Mode == "fused" {
+		return w.produceFused(ctx, t, dir, progress)
+	}
 	o := wf.Options
 	if !o.Confirmed {
 		return errors.New("production was not confirmed")

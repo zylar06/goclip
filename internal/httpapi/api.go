@@ -462,17 +462,17 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 	if p.Duration <= 0 {
 		return &problem{409, "source_not_ready", "Wait for source import to complete", false}
 	}
-	o := domain.AnalysisOptions{Aspect: "original", Goals: []string{"content"}}
+	o := domain.AnalysisOptions{Mode: "fused", Aspect: "original", Goals: []string{"highlight"}}
 	if e = body(r, &o); e != nil {
 		return e
 	}
 	if !o.Confirmed {
 		return bad("Confirm production before analysis")
 	}
-	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" {
-		return bad("Choose subtitle, smart or visual analysis")
+	if o.Mode != "subtitle" && o.Mode != "auto" && o.Mode != "visual" && o.Mode != "fused" {
+		return bad("Choose highlight fusion, subtitle, smart or visual analysis")
 	}
-	if o.Mode == "visual" && !o.AllowVisual {
+	if (o.Mode == "visual" || o.Mode == "fused") && !o.AllowVisual {
 		return bad("Visual analysis requires explicit permission to upload sampled images")
 	}
 	if (o.Duration != 0 && o.Duration < 10) || o.Duration > 120 || !slices.Contains([]string{"original", "portrait", "landscape"}, o.Aspect) || len(o.Instruction) > 4000 ||
@@ -490,7 +490,7 @@ func (a *API) analyze(w http.ResponseWriter, r *http.Request) error {
 		seen[g] = true
 	}
 	kind := "text"
-	if o.Mode == "visual" {
+	if o.Mode == "visual" || o.Mode == "fused" {
 		kind = "vision"
 	}
 	m, e := a.Store.Model(kind)

@@ -16,6 +16,29 @@ const maxSamples = 60
 const jpegLimit = 2 << 20
 const jpegEdge = 640
 
+// EverySecondTimes returns deterministic one-second sample points beginning at
+// zero. The final partial second is omitted so every timestamp is inside the
+// source duration. Callers batch the returned points before SampleAt because a
+// single multimodal request is intentionally capped at 60 images.
+func EverySecondTimes(duration float64) []float64 {
+	if !finite(duration) || duration <= 0 {
+		return []float64{0}
+	}
+	count := int(math.Ceil(duration))
+	if count < 1 {
+		count = 1
+	}
+	times := make([]float64, 0, count)
+	for i := 0; i < count; i++ {
+		at := float64(i)
+		if at >= duration {
+			break
+		}
+		times = append(times, at)
+	}
+	return times
+}
+
 // Match the upstream sparse scan, including its 100 ms end guard. Tiny videos
 // still get their first frame rather than an empty scan.
 func overallSampleTimes(duration float64) []float64 {
