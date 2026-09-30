@@ -13,7 +13,7 @@ Anonymous trusted LAN/VPN users share all projects and cloud costs.
 - `internal/httpapi`: `/api/v1`, SSE snapshots, same-origin mutation checks.
 - `internal/worker`: inspect/import, confirmed production and immutable-snapshot export orchestration.
 - `internal/media`: native subprocesses, subtitles, ASR, frame sampling, title PNG and rendering.
-- `internal/ai`: OpenAI-compatible HTTP adapters, semantic text/visual analysis and initial promo proposals.
+- `internal/ai`: OpenAI-compatible HTTP adapters, subtitle/visual analysis, evidence fusion and checkpoints.
 - `web`: reused React studio UI with web-only adapter, no analytics or native APIs.
 - Docker image contains FFmpeg, yt-dlp, Deno, whisper.cpp, base model and fonts.
 
@@ -25,7 +25,7 @@ Paths below are relative to `/api/v1`.
 - `GET /projects` -> Project[]; `POST /projects` multipart (video file, optional subtitle, name) or JSON `{name,url}` -> Project
 - `GET /projects/{id}` -> `{project,drafts,tasks,candidates,exports}`
 - `DELETE /projects/{id}` (requires JSON `{confirm:true}`; rejects active tasks)
-- `POST /projects/{id}/analyze` -> Task, body `{mode:"subtitle"|"visual",allow_visual:boolean,confirmed:true,goals:["content"],duration:30,aspect:"original",instruction:""}`
+- `POST /projects/{id}/analyze` -> Task, body `{mode:"fused",allow_visual:true,confirmed:true,goals:["highlight"],duration:30,aspect:"original",instruction:""}`. Historical modes remain readable for old tasks.
 - `GET /projects/{id}/source` Range video
 - `GET /projects/{id}/subtitles` -> Cue[]
 - `POST /projects/{id}/drafts` body Draft -> Draft (manual)
