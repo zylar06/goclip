@@ -154,6 +154,8 @@ func TestVisualRejectsUnsupportedEventsAndRefinement(t *testing.T) {
 
 func TestVisualEducationalEvidenceAndPromptScope(t *testing.T) {
 	var calls atomic.Int32
+	opts := visualOptions()
+	opts.Instruction = "只保留足球进球和庆祝片段。"
 	client, _ := modelServer(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		prompt, parts := decodeRequest(t, r)
@@ -161,6 +163,9 @@ func TestVisualEducationalEvidenceAndPromptScope(t *testing.T) {
 		switch stage {
 		case "visual", "refine":
 			assertImages(t, parts, len(parts)/2)
+			if !strings.Contains(prompt, opts.Instruction) {
+				t.Errorf("%s prompt lost user production instructions", stage)
+			}
 			for _, guidance := range []string{"教学", "屏幕文字", "other", "音频"} {
 				if !strings.Contains(prompt, guidance) {
 					t.Errorf("%s prompt lacks general-video guidance %q", stage, guidance)
@@ -173,7 +178,7 @@ func TestVisualEducationalEvidenceAndPromptScope(t *testing.T) {
 			t.Errorf("unexpected stage %s", stage)
 		}
 	})
-	drafts, candidates, err := AnalyzeVisual(context.Background(), client, fixtureFrames(t), 60, visualOptions(), "", nil)
+	drafts, candidates, err := AnalyzeVisual(context.Background(), client, fixtureFrames(t), 60, opts, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
